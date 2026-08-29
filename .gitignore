@@ -4,6 +4,13 @@ backend/target/
 *.jar
 !backend/.mvn/wrapper/maven-wrapper.jar
 
+# Gradle
+pdf-engine-poc/.gradle/
+pdf-engine-poc/build/
+pdf-engine-poc/target/
+pdf-engine-poc/output/
+pdf-engine-poc/lib/
+
 # Node
 frontend/node_modules/
 frontend/dist/
@@ -12,22 +19,24 @@ frontend/dist/
 .idea/
 .vscode/
 *.iml
+*.swp
+*.swo
 
 # Environment
 .env
 .env.local
+.env.*.local
 
 # OS
 .DS_Store
 Thumbs.db
-
-# PDF PoC output
-pdf-engine-poc/output/
-pdf-engine-poc/target/
-pdf-engine-poc/lib/
+Desktop.ini
 
 # Docker volumes
 pgdata/
 redisdata/
 miniodata/
-pompt.md
+
+# Logs and temp
+*.log
+error.txt

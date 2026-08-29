@@ -12,9 +12,13 @@ api.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   } else if (!(config.data instanceof FormData)) {
-    const guestToken = localStorage.getItem('guestToken')
-    if (guestToken) {
-      config.params = { ...config.params, guestToken }
+    const url = config.url || ''
+    const isAuthEndpoint = url.startsWith('/auth/')
+    if (!isAuthEndpoint) {
+      const guestToken = localStorage.getItem('guestToken')
+      if (guestToken) {
+        config.params = { ...config.params, guestToken }
+      }
     }
   }
   return config
