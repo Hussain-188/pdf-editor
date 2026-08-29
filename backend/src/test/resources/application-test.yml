@@ -1,0 +1,36 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+  flyway:
+    enabled: false
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+app:
+  storage:
+    endpoint: http://localhost:9000
+    access-key: test
+    secret-key: test
+    bucket: test
+    region: us-east-1
+  jwt:
+    secret: test-secret-key-must-be-at-least-256-bits-long-for-hmac-sha256-signing
+    access-token-expiry: 900000
+    refresh-token-expiry: 2592000000
+  guest:
+    session-expiry-hours: 24
+    max-documents: 3
+    max-file-size-mb: 50
+  upload:
+    max-file-size-mb: 200
+    max-pages: 2000
+    allowed-types:
+      - application/pdf
