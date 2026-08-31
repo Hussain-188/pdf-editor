@@ -95,16 +95,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   undo: async () => {
     const id = get().documentId
     if (!id) return
-    try {
-      await api.post(`/documents/${id}/undo`)
-    } catch { /* ignore */ }
+    await api.post(`/documents/${id}/undo`)
   },
 
   redo: async () => {
     const id = get().documentId
     if (!id) return
-    try {
-      await api.post(`/documents/${id}/redo`)
-    } catch { /* ignore */ }
+    await api.post(`/documents/${id}/redo`)
   },
 }))

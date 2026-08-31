@@ -43,7 +43,7 @@ public class StorageController {
 
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_TYPE, contentType)
-                .header(HttpHeaders.CACHE_CONTROL, "max-age=3600")
+                .header(HttpHeaders.CACHE_CONTROL, "no-store")
                 .body(resource);
     }
 

@@ -44,6 +44,25 @@ public class ContentStreamWriter {
         String name = op.getName();
         output.write(name.getBytes(StandardCharsets.US_ASCII));
         output.write('\n');
+
+        if ("BI".equals(name)) {
+            COSDictionary params = op.getImageParameters();
+            if (params != null) {
+                for (COSName key : params.keySet()) {
+                    output.write('/');
+                    output.write(key.getName().getBytes(StandardCharsets.US_ASCII));
+                    output.write(' ');
+                    writeCOSBase(params.getDictionaryObject(key));
+                    output.write('\n');
+                }
+            }
+            output.write("ID\n".getBytes(StandardCharsets.US_ASCII));
+            byte[] imageData = op.getImageData();
+            if (imageData != null) {
+                output.write(imageData);
+            }
+            output.write("\nEI\n".getBytes(StandardCharsets.US_ASCII));
+        }
     }
 
     private void writeCOSBase(COSBase cos) throws IOException {

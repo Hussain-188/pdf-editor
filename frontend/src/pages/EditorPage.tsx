@@ -29,6 +29,7 @@ export default function EditorPage() {
   const setDocumentId = useEditorStore((s) => s.setDocumentId)
   const loadAnnotations = useAnnotationStore((s) => s.loadAnnotations)
   const clearAnnotations = useAnnotationStore((s) => s.clearAnnotations)
+  const setActiveTool = useAnnotationStore((s) => s.setActiveTool)
 
   const [pdfDoc, setPdfDoc] = useState<PDFDocumentProxy | null>(null)
   const [pages, setPages] = useState<PDFPageProxy[]>([])
@@ -37,6 +38,10 @@ export default function EditorPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [editorMode, setEditorMode] = useState<EditorMode>('edit')
+
+  useEffect(() => {
+    if (editorMode !== 'annotate') setActiveTool(null)
+  }, [editorMode, setActiveTool])
   const [showVersionPanel, setShowVersionPanel] = useState(false)
   const [showExportDialog, setShowExportDialog] = useState(false)
   const [thumbnailUrls, setThumbnailUrls] = useState<Map<number, string>>(new Map())
@@ -71,24 +76,6 @@ export default function EditorPage() {
     }
   }, [id])
 
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
-        e.preventDefault()
-        undo()
-      }
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
-        e.preventDefault()
-        redo()
-      }
-      if (e.key === 'Escape') {
-        selectBlock(null)
-      }
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [undo, redo, selectBlock])
-
   const generateThumbnails = useCallback(async (doc: PDFDocumentProxy) => {
     const newThumbnails = new Map<number, string>()
     for (let i = 1; i <= doc.numPages; i++) {
@@ -109,7 +96,7 @@ export default function EditorPage() {
       setDocTitle(docInfo.title)
 
       const { data: urlData } = await api.get(`/documents/${docId}/url`)
-      const pdfResponse = await fetch(urlData.url)
+      const pdfResponse = await fetch(urlData.url, { cache: 'no-store' })
       if (!pdfResponse.ok) throw new Error('Failed to download PDF')
       const pdfData = await pdfResponse.arrayBuffer()
       const doc = await getDocument({ data: pdfData }).promise
@@ -139,7 +126,7 @@ export default function EditorPage() {
 
       const { data: urlData } = await api.get(`/documents/${id}/url`)
       pdfDoc?.cleanup()
-      const pdfResponse = await fetch(urlData.url)
+      const pdfResponse = await fetch(urlData.url, { cache: 'no-store' })
       if (!pdfResponse.ok) throw new Error('Failed to download PDF')
       const pdfData = await pdfResponse.arrayBuffer()
       const doc = await getDocument({ data: pdfData }).promise
@@ -158,11 +145,14 @@ export default function EditorPage() {
     try {
       await action()
       await reloadDocument()
+      if (id) {
+        analyzeDocument(id)
+      }
     } catch (err: any) {
       setOperationError(err.response?.data?.error || err.message || 'Operation failed')
       setTimeout(() => setOperationError(null), 5000)
     }
-  }, [reloadDocument])
+  }, [reloadDocument, id, analyzeDocument])
 
   const handleRotate = useCallback((page: number, degrees: number) => {
     handlePageAction(() => api.post(`/documents/${id}/pages/${page}/rotate`, { degrees }))
@@ -228,6 +218,50 @@ export default function EditorPage() {
     }
   }, [id, analyzeDocument, reloadDocument])
 
+  const handleUndo = useCallback(async () => {
+    try {
+      await undo()
+      if (id) {
+        await reloadDocument()
+        analyzeDocument(id)
+      }
+    } catch {
+      setOperationError('Nothing to undo')
+      setTimeout(() => setOperationError(null), 3000)
+    }
+  }, [undo, id, reloadDocument, analyzeDocument])
+
+  const handleRedo = useCallback(async () => {
+    try {
+      await redo()
+      if (id) {
+        await reloadDocument()
+        analyzeDocument(id)
+      }
+    } catch {
+      setOperationError('Nothing to redo')
+      setTimeout(() => setOperationError(null), 3000)
+    }
+  }, [redo, id, reloadDocument, analyzeDocument])
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault()
+        handleUndo()
+      }
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+        e.preventDefault()
+        handleRedo()
+      }
+      if (e.key === 'Escape') {
+        selectBlock(null)
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [handleUndo, handleRedo, selectBlock])
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -275,8 +309,8 @@ export default function EditorPage() {
         onZoomOut={zoomOut}
         onScaleChange={setScale}
         onBack={() => navigate('/dashboard')}
-        onUndo={undo}
-        onRedo={redo}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
         onExport={() => setShowExportDialog(true)}
         onShowHistory={() => setShowVersionPanel(true)}
         onSave={handleSave}

@@ -9,6 +9,7 @@ import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.common.PDStream;
 import org.apache.pdfbox.pdmodel.font.PDFont;
+import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.springframework.stereotype.Service;
 
 import java.io.*;
@@ -40,30 +41,40 @@ public class ContentStreamEditor {
             throws IOException {
 
         PDPage page = document.getPage(pageIndex);
-        PDFont font = getFont(page, textBlock.getFontResourceName());
+        PDFont originalFont = getFont(page, textBlock.getFontResourceName());
 
-        if (font == null) {
+        if (originalFont == null) {
             throw new IOException("Font '" + textBlock.getFontResourceName() +
                     "' not found in page resources");
         }
 
-        // Validate that the new text can be encoded with this font
-        validateEncoding(font, newText);
+        // Try the original font first; fall back to a standard font if encoding fails
+        PDFont effectiveFont = originalFont;
+        String effectiveFontResourceName = textBlock.getFontResourceName();
+        boolean fontChanged = false;
+        try {
+            validateEncoding(originalFont, newText);
+        } catch (IOException encodingError) {
+            effectiveFont = getOrCreateFallbackFont(document, page, textBlock.getFontName());
+            effectiveFontResourceName = findResourceName(page, effectiveFont);
+            fontChanged = true;
+            validateEncoding(effectiveFont, newText);
+        }
 
-        // Parse the content stream into tokens
         PDFStreamParser parser = new PDFStreamParser(page);
         List<Object> tokens = parser.parse();
 
-        // Find and replace the target text in the token stream
-        boolean replaced = replaceInTokens(tokens, textBlock, oldText, newText, font);
+        if (fontChanged) {
+            insertFontChange(tokens, textBlock, effectiveFontResourceName, textBlock.getFontSize());
+        }
+
+        boolean replaced = replaceInTokens(tokens, textBlock, oldText, newText, effectiveFont);
 
         if (!replaced) {
             return false;
         }
 
-        // Write the modified tokens back to the page's content stream
         writeModifiedStream(document, page, tokens);
-
         return true;
     }
 
@@ -383,6 +394,83 @@ public class ContentStreamEditor {
             }
         }
         return false;
+    }
+
+    // --- Font Fallback ---
+
+    private PDFont getOrCreateFallbackFont(PDDocument document, PDPage page, String originalFontName) throws IOException {
+        // Pick the closest Standard 14 match based on the original font name
+        String lower = originalFontName != null ? originalFontName.toLowerCase() : "";
+        org.apache.pdfbox.pdmodel.font.Standard14Fonts.FontName std;
+        if (lower.contains("bold") && lower.contains("italic")) {
+            std = lower.contains("times") || lower.contains("serif")
+                    ? org.apache.pdfbox.pdmodel.font.Standard14Fonts.FontName.TIMES_BOLD_ITALIC
+                    : org.apache.pdfbox.pdmodel.font.Standard14Fonts.FontName.HELVETICA_BOLD_OBLIQUE;
+        } else if (lower.contains("bold")) {
+            std = lower.contains("times") || lower.contains("serif")
+                    ? org.apache.pdfbox.pdmodel.font.Standard14Fonts.FontName.TIMES_BOLD
+                    : lower.contains("courier") || lower.contains("mono")
+                    ? org.apache.pdfbox.pdmodel.font.Standard14Fonts.FontName.COURIER_BOLD
+                    : org.apache.pdfbox.pdmodel.font.Standard14Fonts.FontName.HELVETICA_BOLD;
+        } else if (lower.contains("italic") || lower.contains("oblique")) {
+            std = lower.contains("times") || lower.contains("serif")
+                    ? org.apache.pdfbox.pdmodel.font.Standard14Fonts.FontName.TIMES_ITALIC
+                    : org.apache.pdfbox.pdmodel.font.Standard14Fonts.FontName.HELVETICA_OBLIQUE;
+        } else {
+            std = lower.contains("times") || lower.contains("serif") || lower.contains("roman")
+                    ? org.apache.pdfbox.pdmodel.font.Standard14Fonts.FontName.TIMES_ROMAN
+                    : lower.contains("courier") || lower.contains("mono")
+                    ? org.apache.pdfbox.pdmodel.font.Standard14Fonts.FontName.COURIER
+                    : org.apache.pdfbox.pdmodel.font.Standard14Fonts.FontName.HELVETICA;
+        }
+
+        PDType1Font fallback = new PDType1Font(std);
+
+        // Add to page resources under a unique name
+        if (page.getResources() == null) {
+            page.setResources(new org.apache.pdfbox.pdmodel.PDResources());
+        }
+        COSName resourceName = page.getResources().add(fallback);
+        return fallback;
+    }
+
+    private String findResourceName(PDPage page, PDFont font) throws IOException {
+        if (page.getResources() == null) return "F1";
+        for (COSName name : page.getResources().getFontNames()) {
+            PDFont f = page.getResources().getFont(name);
+            if (f == font || (f != null && f.getName() != null && f.getName().equals(font.getName()))) {
+                return name.getName();
+            }
+        }
+        return "F1";
+    }
+
+    private void insertFontChange(List<Object> tokens, TextBlock textBlock,
+                                  String newFontResourceName, float fontSize) {
+        // Find the Tf operator before the block's first text operator and change it
+        List<TextRun> runs = textBlock.getRuns();
+        if (runs.isEmpty()) return;
+
+        int targetOpIndex = runs.get(0).getOperatorIndex();
+        int currentOpIndex = 0;
+        int lastTfPosition = -1;
+
+        for (int i = 0; i < tokens.size(); i++) {
+            if (tokens.get(i) instanceof Operator op) {
+                if ("Tf".equals(op.getName())) {
+                    lastTfPosition = i;
+                }
+                if (currentOpIndex == targetOpIndex) {
+                    // Replace the font name in the last Tf before this text operator
+                    if (lastTfPosition >= 2) {
+                        tokens.set(lastTfPosition - 2, COSName.getPDFName(newFontResourceName));
+                        tokens.set(lastTfPosition - 1, new COSFloat(fontSize));
+                    }
+                    return;
+                }
+                currentOpIndex++;
+            }
+        }
     }
 
     // --- Utility Methods ---
