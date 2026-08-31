@@ -11,6 +11,8 @@ import com.pdfplatform.document.service.ExportService;
 import com.pdfplatform.document.service.OcrService;
 import com.pdfplatform.document.service.PageManagementService;
 import com.pdfplatform.document.service.TextAnalysisService;
+import com.pdfplatform.document.service.ContentInsertionService;
+import com.pdfplatform.document.service.FindReplaceService;
 import com.pdfplatform.document.service.VersionService;
 import com.pdfplatform.document.entity.DocumentVersion;
 import com.pdfplatform.guest.entity.GuestSession;
@@ -42,11 +44,14 @@ public class DocumentController {
     private final OcrService ocrService;
     private final VersionService versionService;
     private final ExportService exportService;
+    private final ContentInsertionService contentInsertionService;
+    private final FindReplaceService findReplaceService;
 
     public DocumentController(DocumentService documentService, GuestSessionService guestSessionService,
                               TextAnalysisService textAnalysisService, DocumentEditService documentEditService,
                               OperationService operationService, PageManagementService pageManagementService,
-                              OcrService ocrService, VersionService versionService, ExportService exportService) {
+                              OcrService ocrService, VersionService versionService, ExportService exportService,
+                              ContentInsertionService contentInsertionService, FindReplaceService findReplaceService) {
         this.documentService = documentService;
         this.guestSessionService = guestSessionService;
         this.textAnalysisService = textAnalysisService;
@@ -56,6 +61,8 @@ public class DocumentController {
         this.ocrService = ocrService;
         this.versionService = versionService;
         this.exportService = exportService;
+        this.contentInsertionService = contentInsertionService;
+        this.findReplaceService = findReplaceService;
     }
 
     @PostMapping("/upload")
@@ -383,6 +390,124 @@ public class DocumentController {
         List<Integer> pages = body.containsKey("pages") ? (List<Integer>) body.get("pages") : null;
         String url = exportService.exportAsImages(doc, format, dpi, pages);
         return ResponseEntity.ok(Map.of("url", url));
+    }
+
+    @PostMapping("/{id}/find")
+    public ResponseEntity<List<Map<String, Object>>> findText(
+            @PathVariable UUID id,
+            @RequestBody Map<String, Object> body,
+            @RequestParam(required = false) String guestToken,
+            @AuthenticationPrincipal User user) throws IOException {
+        Document doc = getAuthorizedDocument(id, user, guestToken);
+        String searchText = (String) body.get("searchText");
+        boolean caseSensitive = body.containsKey("caseSensitive") && (boolean) body.get("caseSensitive");
+        var results = findReplaceService.find(doc, searchText, caseSensitive);
+        return ResponseEntity.ok(results);
+    }
+
+    @PostMapping("/{id}/replace-all")
+    public ResponseEntity<DocumentResponse> replaceAll(
+            @PathVariable UUID id,
+            @RequestBody Map<String, Object> body,
+            @RequestParam(required = false) String guestToken,
+            @AuthenticationPrincipal User user) throws IOException {
+        Document doc = getAuthorizedDocument(id, user, guestToken);
+        String searchText = (String) body.get("searchText");
+        String replaceText = (String) body.get("replaceText");
+        boolean caseSensitive = body.containsKey("caseSensitive") && (boolean) body.get("caseSensitive");
+        Document result = findReplaceService.replaceAll(doc, searchText, replaceText, caseSensitive);
+        return ResponseEntity.ok(toResponse(result));
+    }
+
+    @PostMapping("/{id}/pages/{pageNumber}/add-image")
+    public ResponseEntity<DocumentResponse> addImage(
+            @PathVariable UUID id,
+            @PathVariable int pageNumber,
+            @RequestParam("image") MultipartFile image,
+            @RequestParam(defaultValue = "50") float x,
+            @RequestParam(defaultValue = "50") float y,
+            @RequestParam(defaultValue = "0") float width,
+            @RequestParam(defaultValue = "0") float height,
+            @RequestParam(required = false) String guestToken,
+            @AuthenticationPrincipal User user) throws IOException {
+        Document doc = getAuthorizedDocument(id, user, guestToken);
+        Document result = contentInsertionService.addImage(doc, pageNumber, image.getBytes(),
+                image.getOriginalFilename() != null ? image.getOriginalFilename() : "image.jpg",
+                x, y, width, height);
+        return ResponseEntity.ok(toResponse(result));
+    }
+
+    @PostMapping("/{id}/pages/{pageNumber}/add-text")
+    public ResponseEntity<DocumentResponse> addText(
+            @PathVariable UUID id,
+            @PathVariable int pageNumber,
+            @RequestBody Map<String, Object> body,
+            @RequestParam(required = false) String guestToken,
+            @AuthenticationPrincipal User user) throws IOException {
+        Document doc = getAuthorizedDocument(id, user, guestToken);
+        String text = (String) body.get("text");
+        float x = ((Number) body.getOrDefault("x", 50)).floatValue();
+        float y = ((Number) body.getOrDefault("y", 50)).floatValue();
+        float fontSize = ((Number) body.getOrDefault("fontSize", 12)).floatValue();
+        String fontName = (String) body.getOrDefault("fontName", "Helvetica");
+        float[] color = null;
+        if (body.containsKey("color")) {
+            var colorList = (java.util.List<?>) body.get("color");
+            color = new float[]{
+                    ((Number) colorList.get(0)).floatValue(),
+                    ((Number) colorList.get(1)).floatValue(),
+                    ((Number) colorList.get(2)).floatValue()
+            };
+        }
+        Document result = contentInsertionService.addText(doc, pageNumber, text, x, y, fontSize, color, fontName);
+        return ResponseEntity.ok(toResponse(result));
+    }
+
+    @PostMapping("/{id}/pages/{pageNumber}/add-shape")
+    public ResponseEntity<DocumentResponse> addShape(
+            @PathVariable UUID id,
+            @PathVariable int pageNumber,
+            @RequestBody Map<String, Object> body,
+            @RequestParam(required = false) String guestToken,
+            @AuthenticationPrincipal User user) throws IOException {
+        Document doc = getAuthorizedDocument(id, user, guestToken);
+        String shapeType = (String) body.getOrDefault("shapeType", "rectangle");
+        float x = ((Number) body.getOrDefault("x", 50)).floatValue();
+        float y = ((Number) body.getOrDefault("y", 50)).floatValue();
+        float w = ((Number) body.getOrDefault("width", 100)).floatValue();
+        float h = ((Number) body.getOrDefault("height", 50)).floatValue();
+        float strokeWidth = ((Number) body.getOrDefault("strokeWidth", 1)).floatValue();
+        float[] strokeColor = parseColorArray(body, "strokeColor");
+        float[] fillColor = parseColorArray(body, "fillColor");
+        Document result = contentInsertionService.addShape(doc, pageNumber, shapeType, x, y, w, h, fillColor, strokeColor, strokeWidth);
+        return ResponseEntity.ok(toResponse(result));
+    }
+
+    @PostMapping("/{id}/pages/{pageNumber}/whiteout")
+    public ResponseEntity<DocumentResponse> whiteout(
+            @PathVariable UUID id,
+            @PathVariable int pageNumber,
+            @RequestBody Map<String, Object> body,
+            @RequestParam(required = false) String guestToken,
+            @AuthenticationPrincipal User user) throws IOException {
+        Document doc = getAuthorizedDocument(id, user, guestToken);
+        float x = ((Number) body.get("x")).floatValue();
+        float y = ((Number) body.get("y")).floatValue();
+        float w = ((Number) body.get("width")).floatValue();
+        float h = ((Number) body.get("height")).floatValue();
+        Document result = contentInsertionService.addWhiteout(doc, pageNumber, x, y, w, h);
+        return ResponseEntity.ok(toResponse(result));
+    }
+
+    private float[] parseColorArray(Map<String, Object> body, String key) {
+        if (!body.containsKey(key)) return null;
+        var list = (java.util.List<?>) body.get(key);
+        if (list == null || list.size() < 3) return null;
+        return new float[]{
+                ((Number) list.get(0)).floatValue(),
+                ((Number) list.get(1)).floatValue(),
+                ((Number) list.get(2)).floatValue()
+        };
     }
 
     @PostMapping("/{id}/autosave")

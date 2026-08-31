@@ -3,81 +3,81 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../stores/authStore'
 import UploadDropzone from '../components/UploadDropzone'
 import {
-  FileText,
-  FileEdit,
-  FileDown,
-  Droplets,
-  Lock,
-  Unlock,
-  Hash,
-  Upload,
-  Shield,
-  Zap,
-  Globe,
-  ArrowRight,
-  X,
+  FileText, FileEdit, FileDown, Droplets, Lock, Unlock, Hash, Upload,
+  Shield, Zap, Globe, ArrowRight, X, RotateCw, FileOutput, Palette,
+  Layers, AlignVerticalSpaceAround, Image, FileImage, Scissors, Merge,
+  Crop, Maximize2, Wrench, AlignLeft, BookOpen, Grid3X3, EyeOff, ListOrdered,
+  ClipboardList, GitCompareArrows, Shuffle, Trash2, PenTool, ScanLine,
+  BookmarkIcon, FileX2, ImageDown,
 } from 'lucide-react'
 
-const TOOLS = [
+const TOOL_CATEGORIES = [
   {
-    title: 'Edit PDF',
-    description: 'Modify text, add content, and customize your documents directly in the browser.',
-    icon: FileEdit,
-    color: 'bg-blue-500',
-    lightColor: 'bg-blue-50',
-    textColor: 'text-blue-600',
-    borderColor: 'border-blue-100',
-    route: null,
+    title: 'Organize',
+    tools: [
+      { title: 'Merge PDF', description: 'Combine multiple PDFs into one.', icon: Merge, color: 'text-orange-600', bg: 'bg-orange-50', route: '/merge' },
+      { title: 'Split PDF', description: 'Divide a PDF into multiple files.', icon: Scissors, color: 'text-indigo-600', bg: 'bg-indigo-50', route: '/split' },
+      { title: 'Organize PDF', description: 'Reorder, rotate, delete pages.', icon: ListOrdered, color: 'text-lime-600', bg: 'bg-lime-50', route: '/organize' },
+      { title: 'Delete Pages', description: 'Remove specific pages from PDF.', icon: Trash2, color: 'text-red-600', bg: 'bg-red-50', route: '/delete-pages' },
+      { title: 'Extract Pages', description: 'Pull out specific pages.', icon: FileOutput, color: 'text-teal-600', bg: 'bg-teal-50', route: '/tools?tool=extract' },
+      { title: 'Rotate PDF', description: 'Rotate all pages in your PDF.', icon: RotateCw, color: 'text-sky-600', bg: 'bg-sky-50', route: '/tools?tool=rotate' },
+      { title: 'Alternate & Mix', description: 'Interleave pages from two PDFs.', icon: Shuffle, color: 'text-amber-600', bg: 'bg-amber-50', route: '/alternate-mix' },
+    ],
   },
   {
-    title: 'Compress PDF',
-    description: 'Reduce file size while keeping quality. Perfect for email attachments.',
-    icon: FileDown,
-    color: 'bg-emerald-500',
-    lightColor: 'bg-emerald-50',
-    textColor: 'text-emerald-600',
-    borderColor: 'border-emerald-100',
-    route: '/tools?tool=compress',
+    title: 'Edit',
+    tools: [
+      { title: 'Edit PDF', description: 'Modify text, fonts, colors directly.', icon: FileEdit, color: 'text-blue-600', bg: 'bg-blue-50', route: null },
+      { title: 'Sign PDF', description: 'Draw, type or upload your signature.', icon: PenTool, color: 'text-indigo-600', bg: 'bg-indigo-50', route: '/sign' },
+      { title: 'Fill PDF Form', description: 'Detect and fill form fields.', icon: ClipboardList, color: 'text-indigo-600', bg: 'bg-indigo-50', route: '/fill-form' },
+      { title: 'Redact PDF', description: 'Black out sensitive content.', icon: EyeOff, color: 'text-gray-700', bg: 'bg-gray-100', route: '/redact' },
+    ],
   },
   {
-    title: 'Add Watermark',
-    description: 'Stamp your documents with custom text watermarks for branding or security.',
-    icon: Droplets,
-    color: 'bg-violet-500',
-    lightColor: 'bg-violet-50',
-    textColor: 'text-violet-600',
-    borderColor: 'border-violet-100',
-    route: '/tools?tool=watermark',
+    title: 'Page Tools',
+    tools: [
+      { title: 'Crop PDF', description: 'Remove margins and crop pages.', icon: Crop, color: 'text-orange-600', bg: 'bg-orange-50', route: '/tools?tool=crop' },
+      { title: 'Resize PDF', description: 'Change page size to A4, Letter.', icon: Maximize2, color: 'text-violet-600', bg: 'bg-violet-50', route: '/tools?tool=resize' },
+      { title: 'Watermark', description: 'Stamp text on every page.', icon: Droplets, color: 'text-violet-600', bg: 'bg-violet-50', route: '/tools?tool=watermark' },
+      { title: 'Page Numbers', description: 'Add page numbers.', icon: Hash, color: 'text-cyan-600', bg: 'bg-cyan-50', route: '/tools?tool=page-numbers' },
+      { title: 'Header & Footer', description: 'Add headers and footers.', icon: AlignVerticalSpaceAround, color: 'text-pink-600', bg: 'bg-pink-50', route: '/tools?tool=header-footer' },
+      { title: 'Bates Numbering', description: 'Add sequential Bates numbers.', icon: BookOpen, color: 'text-rose-600', bg: 'bg-rose-50', route: '/tools?tool=bates-number' },
+      { title: 'N-up', description: 'Multiple pages per sheet.', icon: Grid3X3, color: 'text-fuchsia-600', bg: 'bg-fuchsia-50', route: '/tools?tool=nup' },
+      { title: 'Bookmarks', description: 'View, add, or remove bookmarks.', icon: BookmarkIcon, color: 'text-amber-600', bg: 'bg-amber-50', route: '/bookmarks' },
+    ],
   },
   {
-    title: 'Protect PDF',
-    description: 'Add password protection and control permissions on your PDF files.',
-    icon: Lock,
-    color: 'bg-rose-500',
-    lightColor: 'bg-rose-50',
-    textColor: 'text-rose-600',
-    borderColor: 'border-rose-100',
-    route: '/tools?tool=protect',
+    title: 'Optimize',
+    tools: [
+      { title: 'Compress PDF', description: 'Reduce file size.', icon: FileDown, color: 'text-emerald-600', bg: 'bg-emerald-50', route: '/tools?tool=compress' },
+      { title: 'Grayscale', description: 'Convert to black & white.', icon: Palette, color: 'text-gray-600', bg: 'bg-gray-100', route: '/tools?tool=grayscale' },
+      { title: 'Flatten PDF', description: 'Flatten forms and annotations.', icon: Layers, color: 'text-slate-600', bg: 'bg-slate-50', route: '/tools?tool=flatten' },
+      { title: 'Repair PDF', description: 'Fix corrupted PDF files.', icon: Wrench, color: 'text-yellow-600', bg: 'bg-yellow-50', route: '/tools?tool=repair' },
+      { title: 'Deskew PDF', description: 'Straighten tilted scanned pages.', icon: ScanLine, color: 'text-cyan-600', bg: 'bg-cyan-50', route: '/tools?tool=deskew' },
+    ],
   },
   {
-    title: 'Unlock PDF',
-    description: 'Remove password protection from your PDF documents instantly.',
-    icon: Unlock,
-    color: 'bg-amber-500',
-    lightColor: 'bg-amber-50',
-    textColor: 'text-amber-600',
-    borderColor: 'border-amber-100',
-    route: '/tools?tool=unlock',
+    title: 'Convert',
+    tools: [
+      { title: 'Images to PDF', description: 'Convert JPG/PNG to PDF.', icon: Image, color: 'text-teal-600', bg: 'bg-teal-50', route: '/images-to-pdf' },
+      { title: 'PDF to Images', description: 'Convert pages to JPG/PNG.', icon: FileImage, color: 'text-emerald-600', bg: 'bg-emerald-50', route: '/tools?tool=pdf-to-images' },
+      { title: 'PDF to Text', description: 'Extract all text from PDF.', icon: AlignLeft, color: 'text-cyan-600', bg: 'bg-cyan-50', route: '/tools?tool=pdf-to-text' },
+    ],
   },
   {
-    title: 'Page Numbers',
-    description: 'Automatically add page numbers in any position on your documents.',
-    icon: Hash,
-    color: 'bg-cyan-500',
-    lightColor: 'bg-cyan-50',
-    textColor: 'text-cyan-600',
-    borderColor: 'border-cyan-100',
-    route: '/tools?tool=page-numbers',
+    title: 'Security',
+    tools: [
+      { title: 'Protect PDF', description: 'Add password protection.', icon: Lock, color: 'text-rose-600', bg: 'bg-rose-50', route: '/tools?tool=protect' },
+      { title: 'Unlock PDF', description: 'Remove password protection.', icon: Unlock, color: 'text-amber-600', bg: 'bg-amber-50', route: '/tools?tool=unlock' },
+      { title: 'Remove Metadata', description: 'Strip hidden document info.', icon: FileX2, color: 'text-rose-600', bg: 'bg-rose-50', route: '/tools?tool=remove-metadata' },
+    ],
+  },
+  {
+    title: 'Analyze',
+    tools: [
+      { title: 'Compare PDFs', description: 'Find differences between PDFs.', icon: GitCompareArrows, color: 'text-purple-600', bg: 'bg-purple-50', route: '/compare' },
+      { title: 'Extract Images', description: 'Pull all images from a PDF.', icon: ImageDown, color: 'text-green-600', bg: 'bg-green-50', route: '/tools?tool=extract-images' },
+    ],
   },
 ]
 
@@ -110,7 +110,7 @@ export default function LandingPage() {
   const { isAuthenticated } = useAuthStore()
   const [showUpload, setShowUpload] = useState(false)
 
-  const handleToolClick = (tool: typeof TOOLS[0]) => {
+  const handleToolClick = (tool: { route: string | null }) => {
     if (!tool.route) {
       setShowUpload(true)
     } else {
@@ -131,6 +131,12 @@ export default function LandingPage() {
               <span className="text-lg font-bold text-gray-900">PDF Editor</span>
             </Link>
             <nav className="flex items-center gap-3">
+              <Link
+                to="/tools"
+                className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 transition-colors"
+              >
+                All Tools
+              </Link>
               {isAuthenticated ? (
                 <Link
                   to="/dashboard"
@@ -169,7 +175,7 @@ export default function LandingPage() {
             <span className="text-primary-600">work with PDFs</span>
           </h1>
           <p className="mt-5 text-lg sm:text-xl text-gray-600 max-w-2xl mx-auto leading-relaxed">
-            Edit, compress, protect, and transform your PDF documents — all in your browser.
+            Edit, merge, split, compress, convert, and protect your PDFs — all in one place.
             No installation required.
           </p>
           <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -178,49 +184,55 @@ export default function LandingPage() {
               className="flex items-center gap-2.5 px-8 py-3.5 bg-primary-600 text-white rounded-xl text-base font-semibold hover:bg-primary-700 transition-all shadow-lg shadow-primary-600/20 hover:shadow-xl hover:shadow-primary-600/30"
             >
               <Upload className="h-5 w-5" />
-              Upload PDF
+              Upload & Edit PDF
             </button>
-            {!isAuthenticated && (
-              <Link
-                to="/register"
-                className="text-sm font-medium text-gray-600 hover:text-primary-600 transition-colors"
-              >
-                or create a free account
-              </Link>
-            )}
+            <Link
+              to="/tools"
+              className="text-sm font-medium text-gray-600 hover:text-primary-600 transition-colors"
+            >
+              Browse all tools
+            </Link>
           </div>
         </div>
       </section>
 
-      {/* Tools Grid */}
+      {/* Tools Grid - Categorized like iLovePDF */}
       <section className="py-16 bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-10">
+          <div className="text-center mb-12">
             <h2 className="text-2xl sm:text-3xl font-bold text-gray-900">All the PDF tools you need</h2>
-            <p className="mt-2 text-gray-600">Select a tool to get started</p>
+            <p className="mt-2 text-gray-600">Select a tool to get started, or upload a PDF to edit</p>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {TOOLS.map((tool) => {
-              const Icon = tool.icon
-              return (
-                <button
-                  key={tool.title}
-                  onClick={() => handleToolClick(tool)}
-                  className={`group flex items-start gap-4 p-5 rounded-xl border ${tool.borderColor} bg-white hover:shadow-lg transition-all duration-200 text-left`}
-                >
-                  <div className={`w-12 h-12 rounded-xl ${tool.lightColor} flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform duration-200`}>
-                    <Icon className={`h-6 w-6 ${tool.textColor}`} />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-semibold text-gray-900 group-hover:text-primary-600 transition-colors">
-                      {tool.title}
-                    </h3>
-                    <p className="text-sm text-gray-500 mt-0.5 leading-relaxed">{tool.description}</p>
-                  </div>
-                </button>
-              )
-            })}
-          </div>
+
+          {TOOL_CATEGORIES.map((category) => (
+            <div key={category.title} className="mb-8">
+              <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3 px-1">
+                {category.title}
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                {category.tools.map((tool) => {
+                  const Icon = tool.icon
+                  return (
+                    <button
+                      key={tool.title}
+                      onClick={() => handleToolClick(tool)}
+                      className="group flex items-center gap-3.5 p-4 rounded-xl border border-gray-200 bg-white hover:shadow-md transition-all duration-200 text-left hover:-translate-y-0.5"
+                    >
+                      <div className={`w-10 h-10 rounded-lg ${tool.bg} flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform duration-200`}>
+                        <Icon className={`h-5 w-5 ${tool.color}`} />
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="text-sm font-semibold text-gray-900 group-hover:text-primary-600 transition-colors">
+                          {tool.title}
+                        </h4>
+                        <p className="text-xs text-gray-500 leading-relaxed truncate">{tool.description}</p>
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
         </div>
       </section>
 
@@ -247,7 +259,7 @@ export default function LandingPage() {
       {/* Footer */}
       <footer className="border-t border-gray-100 py-8 mt-auto">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <p className="text-sm text-gray-400">PDF Editor — Edit PDFs directly in your browser</p>
+          <p className="text-sm text-gray-400">PDF Editor — Every PDF tool you need, in your browser</p>
         </div>
       </footer>
 

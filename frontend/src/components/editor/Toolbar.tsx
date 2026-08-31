@@ -2,6 +2,7 @@ import { useState } from 'react'
 import {
   ArrowLeft, Save, Download, History, Undo2, Redo2,
   ZoomIn, ZoomOut, Type, Pencil, LayoutGrid, ChevronDown,
+  PenTool, Search,
 } from 'lucide-react'
 import api from '../../lib/api'
 
@@ -22,6 +23,8 @@ interface ToolbarProps {
   onExport: () => void
   onShowHistory: () => void
   onSave: () => void
+  onSign: () => void
+  onFindReplace: () => void
   editorMode: EditorMode
   onModeChange: (mode: EditorMode) => void
 }
@@ -35,7 +38,7 @@ const modes: { key: EditorMode; label: string; Icon: typeof Type }[] = [
 export default function Toolbar({
   scale, currentPage, totalPages, documentTitle, documentId,
   onZoomIn, onZoomOut, onScaleChange, onBack, onUndo, onRedo,
-  onExport, onShowHistory, onSave, editorMode, onModeChange,
+  onExport, onShowHistory, onSave, onSign, onFindReplace, editorMode, onModeChange,
 }: ToolbarProps) {
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleValue, setTitleValue] = useState(documentTitle)
@@ -176,6 +179,20 @@ export default function Toolbar({
 
       <div className="h-6 w-px bg-gray-200 mx-1" />
 
+      <button
+        onClick={onFindReplace}
+        className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
+        title="Find & Replace (Ctrl+F)"
+      >
+        <Search size={16} />
+      </button>
+      <button
+        onClick={onSign}
+        className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
+        title="Add Signature"
+      >
+        <PenTool size={16} />
+      </button>
       <button
         onClick={onSave}
         className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"

@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import api from '../lib/api'
 
-export type AnnotationType = 'textbox' | 'highlight' | 'freehand' | 'shape' | 'sticky'
+export type AnnotationType = 'textbox' | 'highlight' | 'freehand' | 'shape' | 'sticky' | 'underline' | 'strikethrough' | 'whiteout'
 
 export interface Annotation {
   id: string

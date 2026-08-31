@@ -14,6 +14,8 @@ import PagePanel from '../components/editor/PagePanel'
 import PropertiesPanel from '../components/editor/PropertiesPanel'
 import VersionHistoryPanel from '../components/editor/VersionHistoryPanel'
 import ExportDialog from '../components/editor/ExportDialog'
+import FindReplaceDialog from '../components/editor/FindReplaceDialog'
+import SignatureDialog from '../components/editor/SignatureDialog'
 
 export default function EditorPage() {
   const { id } = useParams<{ id: string }>()
@@ -44,6 +46,8 @@ export default function EditorPage() {
   }, [editorMode, setActiveTool])
   const [showVersionPanel, setShowVersionPanel] = useState(false)
   const [showExportDialog, setShowExportDialog] = useState(false)
+  const [showFindReplace, setShowFindReplace] = useState(false)
+  const [showSignature, setShowSignature] = useState(false)
   const [thumbnailUrls, setThumbnailUrls] = useState<Map<number, string>>(new Map())
   const [saving, setSaving] = useState(false)
   const [operationError, setOperationError] = useState<string | null>(null)
@@ -254,7 +258,16 @@ export default function EditorPage() {
         e.preventDefault()
         handleRedo()
       }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'h') {
+        e.preventDefault()
+        setShowFindReplace((v) => !v)
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+        e.preventDefault()
+        setShowFindReplace(true)
+      }
       if (e.key === 'Escape') {
+        setShowFindReplace(false)
         selectBlock(null)
       }
     }
@@ -314,11 +327,17 @@ export default function EditorPage() {
         onExport={() => setShowExportDialog(true)}
         onShowHistory={() => setShowVersionPanel(true)}
         onSave={handleSave}
+        onSign={() => setShowSignature(true)}
+        onFindReplace={() => setShowFindReplace((v) => !v)}
         editorMode={editorMode}
         onModeChange={setEditorMode}
       />
 
-      <AnnotationToolbar visible={editorMode === 'annotate'} />
+      <AnnotationToolbar
+        visible={editorMode === 'annotate'}
+        documentId={id}
+        onImageInserted={() => { reloadDocument(); if (id) analyzeDocument(id) }}
+      />
 
       <div className="flex-1 flex overflow-hidden">
         <PagePanel
@@ -381,6 +400,25 @@ export default function EditorPage() {
           pageCount={pages.length}
           open={showExportDialog}
           onClose={() => setShowExportDialog(false)}
+        />
+      )}
+
+      {id && (
+        <SignatureDialog
+          documentId={id}
+          pageNumber={currentPage}
+          open={showSignature}
+          onClose={() => setShowSignature(false)}
+          onSigned={() => { reloadDocument(); if (id) analyzeDocument(id) }}
+        />
+      )}
+
+      {id && (
+        <FindReplaceDialog
+          documentId={id}
+          open={showFindReplace}
+          onClose={() => setShowFindReplace(false)}
+          onReplaced={() => { reloadDocument(); if (id) analyzeDocument(id) }}
         />
       )}
 

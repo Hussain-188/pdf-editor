@@ -1,14 +1,19 @@
+import { useRef } from 'react'
 import {
   MousePointer, Type, Highlighter, Pencil, Square, StickyNote,
+  Underline, Strikethrough, RectangleHorizontal, ImagePlus,
 } from 'lucide-react'
 import { useAnnotationStore, type AnnotationType } from '../../stores/annotationStore'
 
 const tools: { type: AnnotationType; label: string; Icon: typeof Type }[] = [
-  { type: 'textbox', label: 'Text Box', Icon: Type },
+  { type: 'textbox', label: 'Text', Icon: Type },
   { type: 'highlight', label: 'Highlight', Icon: Highlighter },
+  { type: 'underline', label: 'Underline', Icon: Underline },
+  { type: 'strikethrough', label: 'Strikethrough', Icon: Strikethrough },
   { type: 'freehand', label: 'Draw', Icon: Pencil },
   { type: 'shape', label: 'Shape', Icon: Square },
-  { type: 'sticky', label: 'Sticky Note', Icon: StickyNote },
+  { type: 'sticky', label: 'Note', Icon: StickyNote },
+  { type: 'whiteout', label: 'Whiteout', Icon: RectangleHorizontal },
 ]
 
 const colors = ['#FFD700', '#FF6B6B', '#EF4444', '#4ECDC4', '#3B82F6', '#8B5CF6', '#22C55E', '#000000']
@@ -17,23 +22,42 @@ const strokeWidths = [1, 2, 3, 5]
 
 interface AnnotationToolbarProps {
   visible: boolean
+  documentId?: string
+  onImageInserted?: () => void
 }
 
-export default function AnnotationToolbar({ visible }: AnnotationToolbarProps) {
+export default function AnnotationToolbar({ visible, documentId, onImageInserted }: AnnotationToolbarProps) {
   const activeTool = useAnnotationStore((s) => s.activeTool)
   const setActiveTool = useAnnotationStore((s) => s.setActiveTool)
   const activeColor = useAnnotationStore((s) => s.activeColor)
   const setActiveColor = useAnnotationStore((s) => s.setActiveColor)
   const activeStrokeWidth = useAnnotationStore((s) => s.activeStrokeWidth)
   const setActiveStrokeWidth = useAnnotationStore((s) => s.setActiveStrokeWidth)
+  const imageInputRef = useRef<HTMLInputElement>(null)
 
   if (!visible) return null
 
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !documentId) return
+    e.target.value = ''
+
+    const formData = new FormData()
+    formData.append('image', file)
+    const { default: api } = await import('../../lib/api')
+    try {
+      await api.post(`/documents/${documentId}/pages/1/add-image`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      onImageInserted?.()
+    } catch { /* ignore */ }
+  }
+
   return (
-    <div className="flex items-center gap-3 px-4 py-2 bg-white border-b border-gray-200 shadow-sm">
+    <div className="flex items-center gap-2 px-4 py-2 bg-white border-b border-gray-200 shadow-sm overflow-x-auto">
       <button
         onClick={() => setActiveTool(null)}
-        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-all ${
+        className={`flex items-center gap-1 px-2 py-1.5 rounded-md text-xs font-medium transition-all shrink-0 ${
           activeTool === null
             ? 'bg-blue-50 text-blue-600 ring-1 ring-blue-200'
             : 'text-gray-500 hover:bg-gray-100'
@@ -44,14 +68,14 @@ export default function AnnotationToolbar({ visible }: AnnotationToolbarProps) {
         Select
       </button>
 
-      <div className="w-px h-6 bg-gray-200" />
+      <div className="w-px h-6 bg-gray-200 shrink-0" />
 
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-0.5">
         {tools.map(({ type, label, Icon }) => (
           <button
             key={type}
             onClick={() => setActiveTool(activeTool === type ? null : type)}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-all ${
+            className={`flex items-center gap-1 px-2 py-1.5 rounded-md text-xs font-medium transition-all shrink-0 ${
               activeTool === type
                 ? 'bg-blue-50 text-blue-600 ring-1 ring-blue-200'
                 : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
@@ -64,15 +88,33 @@ export default function AnnotationToolbar({ visible }: AnnotationToolbarProps) {
         ))}
       </div>
 
-      <div className="w-px h-6 bg-gray-200" />
+      <div className="w-px h-6 bg-gray-200 shrink-0" />
 
-      <div className="flex items-center gap-1.5">
-        <span className="text-[10px] text-gray-400 uppercase tracking-wider">Color</span>
+      <button
+        onClick={() => imageInputRef.current?.click()}
+        className="flex items-center gap-1 px-2 py-1.5 rounded-md text-xs font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-all shrink-0"
+        title="Add Image"
+      >
+        <ImagePlus size={14} />
+        Image
+      </button>
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/*"
+        onChange={handleImageUpload}
+        className="hidden"
+      />
+
+      <div className="w-px h-6 bg-gray-200 shrink-0" />
+
+      <div className="flex items-center gap-1">
+        <span className="text-[10px] text-gray-400 uppercase tracking-wider shrink-0">Color</span>
         {colors.map((color) => (
           <button
             key={color}
             onClick={() => setActiveColor(color)}
-            className={`w-5 h-5 rounded-full transition-all ${
+            className={`w-5 h-5 rounded-full transition-all shrink-0 ${
               activeColor === color
                 ? 'ring-2 ring-offset-1 ring-gray-400 scale-110'
                 : 'hover:scale-110'
@@ -84,14 +126,14 @@ export default function AnnotationToolbar({ visible }: AnnotationToolbarProps) {
 
       {(activeTool === 'freehand' || activeTool === 'shape') && (
         <>
-          <div className="w-px h-6 bg-gray-200" />
-          <div className="flex items-center gap-1.5">
-            <span className="text-[10px] text-gray-400 uppercase tracking-wider">Width</span>
+          <div className="w-px h-6 bg-gray-200 shrink-0" />
+          <div className="flex items-center gap-1">
+            <span className="text-[10px] text-gray-400 uppercase tracking-wider shrink-0">Width</span>
             {strokeWidths.map((w) => (
               <button
                 key={w}
                 onClick={() => setActiveStrokeWidth(w)}
-                className={`w-7 h-7 rounded-md flex items-center justify-center transition-all ${
+                className={`w-7 h-7 rounded-md flex items-center justify-center transition-all shrink-0 ${
                   activeStrokeWidth === w
                     ? 'bg-blue-50 ring-1 ring-blue-200'
                     : 'hover:bg-gray-100'

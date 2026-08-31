@@ -124,6 +124,7 @@ export default function AnnotationLayer({ pageNumber, pageHeight, scale }: Annot
           ...(tool === 'textbox' ? { text: 'Text' } : {}),
           ...(tool === 'sticky' ? { text: 'Note' } : {}),
           ...(tool === 'shape' ? { shapeType: 'rectangle' as const } : {}),
+          ...(tool === 'whiteout' ? { color: '#FFFFFF' } : {}),
         }
 
         addAnnotationRef.current(annotation)
@@ -209,6 +210,57 @@ export default function AnnotationLayer({ pageNumber, pageHeight, scale }: Annot
             backgroundColor: ann.color, opacity: 0.3,
             outline: isSelected ? '2px solid #3B82F6' : 'none',
             pointerEvents: 'auto',
+          }}
+          onMouseDown={(e) => handleAnnotationMouseDown(e, ann)}
+        />
+      )
+    }
+
+    if (ann.type === 'underline') {
+      return (
+        <div
+          key={ann.id}
+          className="absolute cursor-move"
+          style={{
+            left: rect.x, top: rect.y + rect.height - 2 * scale,
+            width: rect.width, height: 2 * scale,
+            backgroundColor: ann.color,
+            outline: isSelected ? '2px solid #3B82F6' : 'none',
+            pointerEvents: 'auto',
+          }}
+          onMouseDown={(e) => handleAnnotationMouseDown(e, ann)}
+        />
+      )
+    }
+
+    if (ann.type === 'strikethrough') {
+      return (
+        <div
+          key={ann.id}
+          className="absolute cursor-move"
+          style={{
+            left: rect.x, top: rect.y + rect.height / 2 - scale,
+            width: rect.width, height: 2 * scale,
+            backgroundColor: ann.color,
+            outline: isSelected ? '2px solid #3B82F6' : 'none',
+            pointerEvents: 'auto',
+          }}
+          onMouseDown={(e) => handleAnnotationMouseDown(e, ann)}
+        />
+      )
+    }
+
+    if (ann.type === 'whiteout') {
+      return (
+        <div
+          key={ann.id}
+          className="absolute cursor-move"
+          style={{
+            left: rect.x, top: rect.y, width: rect.width, height: rect.height,
+            backgroundColor: '#FFFFFF',
+            outline: isSelected ? '2px solid #3B82F6' : 'none',
+            pointerEvents: 'auto',
+            boxShadow: isSelected ? 'none' : '0 0 0 1px rgba(0,0,0,0.05)',
           }}
           onMouseDown={(e) => handleAnnotationMouseDown(e, ann)}
         />
