@@ -14,6 +14,8 @@ import org.springframework.stereotype.Service;
 import java.io.*;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * The core content stream manipulation engine.
@@ -103,7 +105,6 @@ public class ContentStreamEditor {
 
     private boolean replaceInTokens(List<Object> tokens, TextBlock textBlock,
                                     String oldText, String newText, PDFont font) throws IOException {
-        // Strategy: find the operator(s) that contain the old text and rewrite them
         List<TextRun> runs = textBlock.getRuns();
 
         // Case 1: The text to replace is entirely within a single run
@@ -113,10 +114,22 @@ public class ContentStreamEditor {
             }
         }
 
-        // Case 2: The text spans multiple runs - replace across the full block
+        // Case 2: Full block text replacement — the frontend sends getFullText() as oldText,
+        // which includes spaces inferred from glyph gaps. Match against getFullText() and
+        // rewrite all operators in the block with the new text.
         String fullText = textBlock.getFullText();
         if (fullText.contains(oldText)) {
-            return replaceAcrossRuns(tokens, runs, oldText, newText, font);
+            String replacedFull = fullText.replaceFirst(
+                    Pattern.quote(oldText), Matcher.quoteReplacement(newText));
+            return replaceBlockText(tokens, runs, replacedFull, font);
+        }
+
+        // Case 3: Try raw concatenation (no gap-based spaces) as fallback
+        String rawText = runs.stream().map(TextRun::getText).reduce("", String::concat);
+        if (rawText.contains(oldText)) {
+            String replacedRaw = rawText.replaceFirst(
+                    Pattern.quote(oldText), Matcher.quoteReplacement(newText));
+            return replaceBlockText(tokens, runs, replacedRaw, font);
         }
 
         return false;
@@ -154,7 +167,7 @@ public class ContentStreamEditor {
 
             COSString cosString = (COSString) tokens.get(operandIndex);
             String decoded = decodeString(cosString, font);
-            String replaced = decoded.replace(oldText, newText);
+            String replaced = decoded.replaceFirst(Pattern.quote(oldText), Matcher.quoteReplacement(newText));
 
             COSString newCosString = encodeString(replaced, font);
             tokens.set(operandIndex, newCosString);
@@ -172,7 +185,7 @@ public class ContentStreamEditor {
                 COSBase element = array.get(run.getTjArrayIndex());
                 if (element instanceof COSString cosString) {
                     String decoded = decodeString(cosString, font);
-                    String replaced = decoded.replace(oldText, newText);
+                    String replaced = decoded.replaceFirst(Pattern.quote(oldText), Matcher.quoteReplacement(newText));
                     COSString newCosString = encodeString(replaced, font);
                     array.set(run.getTjArrayIndex(), newCosString);
                     return true;
@@ -226,7 +239,7 @@ public class ContentStreamEditor {
         // Complex case: text spans multiple array elements
         // Replace the entire array with a single string
         COSArray newArray = new COSArray();
-        String replacedFull = full.replace(oldText, newText);
+        String replacedFull = full.replaceFirst(Pattern.quote(oldText), Matcher.quoteReplacement(newText));
         newArray.add(encodeString(replacedFull, font));
 
         // Copy the new array contents back
@@ -237,50 +250,54 @@ public class ContentStreamEditor {
         return true;
     }
 
-    private boolean replaceAcrossRuns(List<Object> tokens, List<TextRun> runs,
-                                      String oldText, String newText, PDFont font) throws IOException {
-        // When text spans multiple operators, we put the replacement text in the first
-        // operator and clear the subsequent ones that contained parts of the old text
+    private boolean replaceBlockText(List<Object> tokens, List<TextRun> runs,
+                                     String newFullText, PDFont font) throws IOException {
         if (runs.isEmpty()) return false;
 
-        TextRun firstRun = runs.get(0);
-        String fullText = "";
+        // Collect distinct operator indices used by this block's runs
+        java.util.Set<Integer> opIndices = new java.util.LinkedHashSet<>();
         for (TextRun run : runs) {
-            fullText += run.getText();
+            opIndices.add(run.getOperatorIndex());
         }
 
-        if (!fullText.contains(oldText)) return false;
-
-        String replacedFull = fullText.replace(oldText, newText);
-
-        // Put all the text in the first operator
-        int firstOpIndex = firstRun.getOperatorIndex();
+        int firstOpIndex = runs.get(0).getOperatorIndex();
         int currentOpIndex = 0;
         boolean firstDone = false;
 
         for (int i = 0; i < tokens.size(); i++) {
-            if (tokens.get(i) instanceof Operator) {
-                if (currentOpIndex == firstOpIndex && !firstDone) {
-                    // Replace the first operator's text with the full replacement
-                    int operandIdx = findOperandIndex(tokens, i);
-                    if (operandIdx >= 0 && tokens.get(operandIdx) instanceof COSString) {
-                        tokens.set(operandIdx, encodeString(replacedFull, font));
+            if (!(tokens.get(i) instanceof Operator)) continue;
+
+            if (currentOpIndex == firstOpIndex && !firstDone) {
+                // Put all replacement text in the first operator
+                int operandIdx = findOperandIndex(tokens, i);
+                if (operandIdx >= 0) {
+                    Object operand = tokens.get(operandIdx);
+                    if (operand instanceof COSString) {
+                        tokens.set(operandIdx, encodeString(newFullText, font));
+                        firstDone = true;
+                    } else if (operand instanceof COSArray array) {
+                        array.clear();
+                        array.add(encodeString(newFullText, font));
                         firstDone = true;
                     }
-                } else if (firstDone && isTextShowingOperator(tokens, i)) {
-                    // Clear subsequent text operators that were part of this block
-                    for (TextRun run : runs) {
-                        if (run != firstRun && run.getOperatorIndex() == currentOpIndex) {
-                            int operandIdx = findOperandIndex(tokens, i);
-                            if (operandIdx >= 0 && tokens.get(operandIdx) instanceof COSString) {
-                                tokens.set(operandIdx, encodeString("", font));
+                }
+            } else if (firstDone && opIndices.contains(currentOpIndex)) {
+                // Clear subsequent operators that belong to this block
+                int operandIdx = findOperandIndex(tokens, i);
+                if (operandIdx >= 0) {
+                    Object operand = tokens.get(operandIdx);
+                    if (operand instanceof COSString) {
+                        tokens.set(operandIdx, encodeString("", font));
+                    } else if (operand instanceof COSArray array) {
+                        for (int j = 0; j < array.size(); j++) {
+                            if (array.get(j) instanceof COSString) {
+                                array.set(j, encodeString("", font));
                             }
-                            break;
                         }
                     }
                 }
-                currentOpIndex++;
             }
+            currentOpIndex++;
         }
 
         return firstDone;
@@ -376,22 +393,29 @@ public class ContentStreamEditor {
     }
 
     private void validateEncoding(PDFont font, String text) throws IOException {
-        // Check if each character can be encoded by this font
+        List<Character> unsupported = new ArrayList<>();
         for (int i = 0; i < text.length(); i++) {
             char c = text.charAt(i);
             try {
                 byte[] encoded = font.encode(String.valueOf(c));
                 if (encoded == null || encoded.length == 0) {
-                    throw new IOException("Character '" + c + "' (U+" +
-                            String.format("%04X", (int) c) +
-                            ") cannot be encoded with font '" + font.getName() + "'");
+                    unsupported.add(c);
                 }
             } catch (IllegalArgumentException | IOException e) {
-                throw new IOException("Character '" + c + "' (U+" +
-                        String.format("%04X", (int) c) +
-                        ") cannot be encoded with font '" + font.getName() +
-                        "': " + e.getMessage());
+                unsupported.add(c);
             }
+        }
+        if (!unsupported.isEmpty()) {
+            String chars = unsupported.stream()
+                    .map(c -> "'" + c + "'")
+                    .distinct()
+                    .reduce((a, b) -> a + ", " + b)
+                    .orElse("");
+            boolean isSubset = font.getName() != null && font.getName().contains("+");
+            String hint = isSubset
+                    ? ". This is a subset font — only characters from the original document are available. Try using only letters that appear elsewhere in this text block."
+                    : "";
+            throw new IOException("Characters " + chars + " cannot be encoded with this font" + hint);
         }
     }
 

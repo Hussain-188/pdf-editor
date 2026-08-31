@@ -28,10 +28,10 @@ public class DocumentOperation {
     @Column(name = "target_object_id")
     private String targetObjectId;
 
-    @Column(name = "parameters", columnDefinition = "jsonb")
+    @Column(name = "parameters", columnDefinition = "json")
     private String parameters;
 
-    @Column(name = "inverse_parameters", columnDefinition = "jsonb")
+    @Column(name = "inverse_parameters", columnDefinition = "json")
     private String inverseParameters;
 
     @Column(name = "is_undone", nullable = false)

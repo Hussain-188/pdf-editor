@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Download, X, FileText, Image, Loader2 } from 'lucide-react'
 import api from '../../lib/api'
 
 interface ExportDialogProps {
@@ -9,6 +10,12 @@ interface ExportDialogProps {
 }
 
 type ExportFormat = 'pdf' | 'png' | 'jpg'
+
+const FORMAT_OPTIONS: { value: ExportFormat; label: string; icon: React.ReactNode; desc: string }[] = [
+  { value: 'pdf', label: 'PDF', icon: <FileText className="w-5 h-5" />, desc: 'Original document format' },
+  { value: 'png', label: 'PNG', icon: <Image className="w-5 h-5" />, desc: 'Lossless image' },
+  { value: 'jpg', label: 'JPG', icon: <Image className="w-5 h-5" />, desc: 'Compressed image' },
+]
 
 export default function ExportDialog({ documentId, pageCount, open, onClose }: ExportDialogProps) {
   const [format, setFormat] = useState<ExportFormat>('pdf')
@@ -69,48 +76,62 @@ export default function ExportDialog({ documentId, pageCount, open, onClose }: E
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl w-96 p-5">
-        <h3 className="text-sm font-semibold text-gray-800 mb-4">Export Document</h3>
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-xl w-[420px] animate-scale-in" onClick={(e) => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <div className="flex items-center gap-2">
+            <Download className="w-5 h-5 text-primary-600" />
+            <h3 className="font-semibold text-gray-900">Export Document</h3>
+          </div>
+          <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
 
-        <div className="space-y-3">
+        <div className="p-6 space-y-5">
+          {/* Format */}
           <div>
-            <label className="text-xs font-medium text-gray-600 block mb-1">Format</label>
-            <div className="flex gap-2">
-              {(['pdf', 'png', 'jpg'] as ExportFormat[]).map((f) => (
+            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">Format</label>
+            <div className="grid grid-cols-3 gap-2">
+              {FORMAT_OPTIONS.map((opt) => (
                 <button
-                  key={f}
-                  onClick={() => setFormat(f)}
-                  className={`px-3 py-1.5 text-xs rounded border ${
-                    format === f
-                      ? 'bg-primary-100 border-primary-400 text-primary-700'
-                      : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                  key={opt.value}
+                  onClick={() => setFormat(opt.value)}
+                  className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 transition-all ${
+                    format === opt.value
+                      ? 'border-primary-500 bg-primary-50 text-primary-700'
+                      : 'border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
                   }`}
                 >
-                  {f.toUpperCase()}
+                  {opt.icon}
+                  <span className="text-xs font-semibold">{opt.label}</span>
                 </button>
               ))}
             </div>
           </div>
 
+          {/* Pages */}
           <div>
-            <label className="text-xs font-medium text-gray-600 block mb-1">Pages</label>
-            <div className="flex gap-2 items-center">
-              <label className="flex items-center gap-1 text-xs">
+            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">Pages</label>
+            <div className="flex gap-3 mb-2">
+              <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="radio"
                   checked={pageSelection === 'all'}
                   onChange={() => setPageSelection('all')}
+                  className="w-4 h-4 text-primary-600 focus:ring-primary-500"
                 />
-                All ({pageCount})
+                <span className="text-sm text-gray-700">All pages ({pageCount})</span>
               </label>
-              <label className="flex items-center gap-1 text-xs">
+              <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="radio"
                   checked={pageSelection === 'custom'}
                   onChange={() => setPageSelection('custom')}
+                  className="w-4 h-4 text-primary-600 focus:ring-primary-500"
                 />
-                Custom
+                <span className="text-sm text-gray-700">Custom</span>
               </label>
             </div>
             {pageSelection === 'custom' && (
@@ -118,38 +139,61 @@ export default function ExportDialog({ documentId, pageCount, open, onClose }: E
                 type="text"
                 value={customPages}
                 onChange={(e) => setCustomPages(e.target.value)}
-                placeholder="e.g., 1-3, 5, 8"
-                className="mt-1 w-full px-2 py-1 text-xs border rounded"
+                placeholder="e.g. 1-3, 5, 8"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
               />
             )}
           </div>
 
+          {/* DPI (images only) */}
           {format !== 'pdf' && (
             <div>
-              <label className="text-xs font-medium text-gray-600 block mb-1">DPI</label>
-              <select
-                value={dpi}
-                onChange={(e) => setDpi(Number(e.target.value))}
-                className="w-full px-2 py-1 text-xs border rounded"
-              >
-                <option value={72}>72 (Screen)</option>
-                <option value={150}>150 (Standard)</option>
-                <option value={300}>300 (High quality)</option>
-              </select>
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">Quality</label>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { value: 72, label: 'Screen', desc: '72 DPI' },
+                  { value: 150, label: 'Standard', desc: '150 DPI' },
+                  { value: 300, label: 'High', desc: '300 DPI' },
+                ].map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setDpi(opt.value)}
+                    className={`p-2.5 rounded-xl border-2 text-center transition-all ${
+                      dpi === opt.value
+                        ? 'border-primary-500 bg-primary-50'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <span className="text-xs font-semibold text-gray-800 block">{opt.label}</span>
+                    <span className="text-[10px] text-gray-500">{opt.desc}</span>
+                  </button>
+                ))}
+              </div>
             </div>
           )}
         </div>
 
-        <div className="flex gap-2 mt-5 justify-end">
-          <button onClick={onClose} className="px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-100 rounded">
+        {/* Footer */}
+        <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50 rounded-b-2xl">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-200 rounded-lg transition-colors">
             Cancel
           </button>
           <button
             onClick={handleExport}
             disabled={exporting}
-            className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded hover:bg-primary-700 disabled:opacity-50"
+            className="px-5 py-2 text-sm font-semibold bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
           >
-            {exporting ? 'Exporting...' : 'Export'}
+            {exporting ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Exporting...
+              </>
+            ) : (
+              <>
+                <Download className="w-4 h-4" />
+                Export
+              </>
+            )}
           </button>
         </div>
       </div>

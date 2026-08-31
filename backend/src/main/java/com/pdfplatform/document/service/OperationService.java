@@ -48,8 +48,8 @@ public class OperationService {
         op.setInverseParameters(objectMapper.writeValueAsString(Map.of(
                 "oldText", nullSafe(request.newText()),
                 "newText", nullSafe(request.oldText()),
-                "fontSize", 0,
-                "color", new double[]{}
+                "fontSize", request.fontSize() != null ? request.fontSize() : 0,
+                "color", request.color() != null ? request.color() : new double[]{}
         )));
 
         operationRepository.save(op);
@@ -66,13 +66,19 @@ public class OperationService {
         DocumentOperation lastOp = undoable.get(0);
         Map<String, Object> inverse = objectMapper.readValue(lastOp.getInverseParameters(), Map.class);
 
+        Double fontSize = inverse.get("fontSize") instanceof Number n && n.doubleValue() != 0
+                ? n.doubleValue() : null;
+        double[] color = null;
+        if (inverse.get("color") instanceof List<?> colorList && !colorList.isEmpty()) {
+            color = colorList.stream().mapToDouble(c -> ((Number) c).doubleValue()).toArray();
+        }
         EditRequest undoRequest = new EditRequest(
                 lastOp.getPageNumber(),
                 lastOp.getTargetObjectId(),
                 lastOp.getOperationType(),
                 (String) inverse.get("oldText"),
                 (String) inverse.get("newText"),
-                null, null
+                fontSize, color
         );
 
         Document result = documentEditService.applyEdit(doc, undoRequest);
@@ -91,13 +97,19 @@ public class OperationService {
         DocumentOperation nextOp = redoable.get(0);
         Map<String, Object> params = objectMapper.readValue(nextOp.getParameters(), Map.class);
 
+        Double redoFontSize = params.get("fontSize") instanceof Number n && n.doubleValue() != 0
+                ? n.doubleValue() : null;
+        double[] redoColor = null;
+        if (params.get("color") instanceof List<?> colorList && !colorList.isEmpty()) {
+            redoColor = colorList.stream().mapToDouble(c -> ((Number) c).doubleValue()).toArray();
+        }
         EditRequest redoRequest = new EditRequest(
                 nextOp.getPageNumber(),
                 nextOp.getTargetObjectId(),
                 nextOp.getOperationType(),
                 (String) params.get("oldText"),
                 (String) params.get("newText"),
-                null, null
+                redoFontSize, redoColor
         );
 
         Document result = documentEditService.applyEdit(doc, redoRequest);

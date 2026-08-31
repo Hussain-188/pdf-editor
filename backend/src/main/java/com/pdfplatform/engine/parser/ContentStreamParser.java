@@ -11,35 +11,35 @@ import org.apache.pdfbox.util.Matrix;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.List;
 
-/**
- * Parses PDF content streams at the operator level to extract text operations
- * with full positional and font context. This works directly with the token
- * stream rather than using the high-level PDFStreamEngine, giving us the
- * operator indices we need for content stream rewriting.
- */
 @Service
 public class ContentStreamParser {
 
-    private PDResources resources;
-    private Matrix textMatrix;
-    private Matrix textLineMatrix;
-    private PDFont currentFont;
-    private String currentFontResourceName;
-    private float currentFontSize;
-    private float[] currentColor;
-    private float wordSpacing;
-    private float charSpacing;
-    private float textLeading;
-    private float textRise;
-    private float horizontalScaling;
+    private static class ParseContext {
+        PDResources resources;
+        Matrix textMatrix;
+        Matrix textLineMatrix;
+        Matrix ctm = new Matrix();
+        Deque<Matrix> graphicsStateStack = new ArrayDeque<>();
+        PDFont currentFont;
+        String currentFontResourceName;
+        float currentFontSize = 12;
+        float[] currentColor = {0, 0, 0};
+        float wordSpacing;
+        float charSpacing;
+        float textLeading;
+        float textRise;
+        float horizontalScaling = 100;
+    }
 
     public List<TextRun> parse(PDPage page) throws IOException {
         List<TextRun> runs = new ArrayList<>();
-        resources = page.getResources();
-        resetState();
+        ParseContext ctx = new ParseContext();
+        ctx.resources = page.getResources();
 
         PDFStreamParser parser = new PDFStreamParser(page);
         List<Object> tokens = parser.parse();
@@ -49,7 +49,7 @@ public class ContentStreamParser {
 
         for (Object token : tokens) {
             if (token instanceof Operator operator) {
-                processOperator(operator, operands, runs, operatorIndex);
+                processOperator(ctx, operator, operands, runs, operatorIndex);
                 operatorIndex++;
                 operands.clear();
             } else if (token instanceof COSBase cosBase) {
@@ -60,128 +60,51 @@ public class ContentStreamParser {
         return runs;
     }
 
-    /**
-     * Returns the raw token list for a page's content stream.
-     * Used by the editor to rebuild modified streams.
-     */
     public List<Object> getTokens(PDPage page) throws IOException {
         PDFStreamParser parser = new PDFStreamParser(page);
         return parser.parse();
     }
 
-    private void processOperator(Operator operator, List<COSBase> operands,
+    private void processOperator(ParseContext ctx, Operator operator, List<COSBase> operands,
                                  List<TextRun> runs, int operatorIndex) throws IOException {
         String op = operator.getName();
 
         switch (op) {
-            // Text state operators
-            case "Tf" -> handleTf(operands);
-            case "Tc" -> handleTc(operands);
-            case "Tw" -> handleTw(operands);
-            case "TL" -> handleTL(operands);
-            case "Ts" -> handleTs(operands);
-            case "Tz" -> handleTz(operands);
+            case "Tf" -> handleTf(ctx, operands);
+            case "Tc" -> handleTc(ctx, operands);
+            case "Tw" -> handleTw(ctx, operands);
+            case "TL" -> handleTL(ctx, operands);
+            case "Ts" -> handleTs(ctx, operands);
+            case "Tz" -> handleTz(ctx, operands);
 
-            // Text positioning operators
-            case "BT" -> handleBT();
-            case "ET" -> handleET();
-            case "Td" -> handleTd(operands);
-            case "TD" -> handleTD(operands);
-            case "Tm" -> handleTm(operands);
-            case "T*" -> handleTStar();
+            case "BT" -> handleBT(ctx);
+            case "ET" -> handleET(ctx);
+            case "Td" -> handleTd(ctx, operands);
+            case "TD" -> handleTD(ctx, operands);
+            case "Tm" -> handleTm(ctx, operands);
+            case "T*" -> handleTStar(ctx);
 
-            // Text showing operators
-            case "Tj" -> handleTj(operands, runs, operatorIndex);
-            case "TJ" -> handleTJ(operands, runs, operatorIndex);
-            case "'" -> handleQuote(operands, runs, operatorIndex);
-            case "\"" -> handleDoubleQuote(operands, runs, operatorIndex);
+            case "Tj" -> handleTj(ctx, operands, runs, operatorIndex);
+            case "TJ" -> handleTJ(ctx, operands, runs, operatorIndex);
+            case "'" -> handleQuote(ctx, operands, runs, operatorIndex);
+            case "\"" -> handleDoubleQuote(ctx, operands, runs, operatorIndex);
 
-            // Color operators (non-stroking)
-            case "g" -> handleGray(operands);
-            case "rg" -> handleRGB(operands);
-            case "k" -> handleCMYK(operands);
-            case "cs", "sc", "scn" -> {} // Complex color spaces - use default
+            case "g" -> handleGray(ctx, operands);
+            case "rg" -> handleRGB(ctx, operands);
+            case "k" -> handleCMYK(ctx, operands);
 
+            case "cm" -> handleCm(ctx, operands);
+            case "q" -> handleQ(ctx);
+            case "Q" -> handleQRestore(ctx);
+
+            case "cs", "sc", "scn" -> {}
             default -> {}
         }
     }
 
-    private void resetState() {
-        textMatrix = null;
-        textLineMatrix = null;
-        currentFont = null;
-        currentFontResourceName = null;
-        currentFontSize = 12;
-        currentColor = new float[]{0, 0, 0};
-        wordSpacing = 0;
-        charSpacing = 0;
-        textLeading = 0;
-        textRise = 0;
-        horizontalScaling = 100;
-    }
+    // --- Graphics State Operators ---
 
-    // --- Text State Operators ---
-
-    private void handleTf(List<COSBase> operands) throws IOException {
-        if (operands.size() < 2) return;
-        COSName fontName = (COSName) operands.get(0);
-        currentFontSize = ((COSNumber) operands.get(1)).floatValue();
-        currentFontResourceName = fontName.getName();
-
-        if (resources != null) {
-            currentFont = resources.getFont(fontName);
-        }
-    }
-
-    private void handleTc(List<COSBase> operands) {
-        if (!operands.isEmpty()) charSpacing = ((COSNumber) operands.get(0)).floatValue();
-    }
-
-    private void handleTw(List<COSBase> operands) {
-        if (!operands.isEmpty()) wordSpacing = ((COSNumber) operands.get(0)).floatValue();
-    }
-
-    private void handleTL(List<COSBase> operands) {
-        if (!operands.isEmpty()) textLeading = ((COSNumber) operands.get(0)).floatValue();
-    }
-
-    private void handleTs(List<COSBase> operands) {
-        if (!operands.isEmpty()) textRise = ((COSNumber) operands.get(0)).floatValue();
-    }
-
-    private void handleTz(List<COSBase> operands) {
-        if (!operands.isEmpty()) horizontalScaling = ((COSNumber) operands.get(0)).floatValue();
-    }
-
-    // --- Text Positioning Operators ---
-
-    private void handleBT() {
-        textMatrix = new Matrix();
-        textLineMatrix = new Matrix();
-    }
-
-    private void handleET() {
-        textMatrix = null;
-        textLineMatrix = null;
-    }
-
-    private void handleTd(List<COSBase> operands) {
-        if (operands.size() < 2) return;
-        float tx = ((COSNumber) operands.get(0)).floatValue();
-        float ty = ((COSNumber) operands.get(1)).floatValue();
-        Matrix translation = Matrix.getTranslateInstance(tx, ty);
-        textLineMatrix = translation.multiply(textLineMatrix);
-        textMatrix = textLineMatrix.clone();
-    }
-
-    private void handleTD(List<COSBase> operands) {
-        if (operands.size() < 2) return;
-        float ty = ((COSNumber) operands.get(1)).floatValue();
-        textLeading = -ty;
-        handleTd(operands);
-    }
-
-    private void handleTm(List<COSBase> operands) {
+    private void handleCm(ParseContext ctx, List<COSBase> operands) {
         if (operands.size() < 6) return;
         float a = ((COSNumber) operands.get(0)).floatValue();
         float b = ((COSNumber) operands.get(1)).floatValue();
@@ -189,102 +112,183 @@ public class ContentStreamParser {
         float d = ((COSNumber) operands.get(3)).floatValue();
         float e = ((COSNumber) operands.get(4)).floatValue();
         float f = ((COSNumber) operands.get(5)).floatValue();
-        textMatrix = new Matrix(a, b, c, d, e, f);
-        textLineMatrix = textMatrix.clone();
+        Matrix cm = new Matrix(a, b, c, d, e, f);
+        ctx.ctm = cm.multiply(ctx.ctm);
     }
 
-    private void handleTStar() {
+    private void handleQ(ParseContext ctx) {
+        ctx.graphicsStateStack.push(ctx.ctm.clone());
+    }
+
+    private void handleQRestore(ParseContext ctx) {
+        if (!ctx.graphicsStateStack.isEmpty()) {
+            ctx.ctm = ctx.graphicsStateStack.pop();
+        }
+    }
+
+    // --- Text State Operators ---
+
+    private void handleTf(ParseContext ctx, List<COSBase> operands) throws IOException {
+        if (operands.size() < 2) return;
+        COSName fontName = (COSName) operands.get(0);
+        ctx.currentFontSize = ((COSNumber) operands.get(1)).floatValue();
+        ctx.currentFontResourceName = fontName.getName();
+
+        if (ctx.resources != null) {
+            ctx.currentFont = ctx.resources.getFont(fontName);
+        }
+    }
+
+    private void handleTc(ParseContext ctx, List<COSBase> operands) {
+        if (!operands.isEmpty()) ctx.charSpacing = ((COSNumber) operands.get(0)).floatValue();
+    }
+
+    private void handleTw(ParseContext ctx, List<COSBase> operands) {
+        if (!operands.isEmpty()) ctx.wordSpacing = ((COSNumber) operands.get(0)).floatValue();
+    }
+
+    private void handleTL(ParseContext ctx, List<COSBase> operands) {
+        if (!operands.isEmpty()) ctx.textLeading = ((COSNumber) operands.get(0)).floatValue();
+    }
+
+    private void handleTs(ParseContext ctx, List<COSBase> operands) {
+        if (!operands.isEmpty()) ctx.textRise = ((COSNumber) operands.get(0)).floatValue();
+    }
+
+    private void handleTz(ParseContext ctx, List<COSBase> operands) {
+        if (!operands.isEmpty()) ctx.horizontalScaling = ((COSNumber) operands.get(0)).floatValue();
+    }
+
+    // --- Text Positioning Operators ---
+
+    private void handleBT(ParseContext ctx) {
+        ctx.textMatrix = new Matrix();
+        ctx.textLineMatrix = new Matrix();
+    }
+
+    private void handleET(ParseContext ctx) {
+        ctx.textMatrix = null;
+        ctx.textLineMatrix = null;
+    }
+
+    private void handleTd(ParseContext ctx, List<COSBase> operands) {
+        if (operands.size() < 2) return;
+        float tx = ((COSNumber) operands.get(0)).floatValue();
+        float ty = ((COSNumber) operands.get(1)).floatValue();
+        Matrix translation = Matrix.getTranslateInstance(tx, ty);
+        ctx.textLineMatrix = translation.multiply(ctx.textLineMatrix);
+        ctx.textMatrix = ctx.textLineMatrix.clone();
+    }
+
+    private void handleTD(ParseContext ctx, List<COSBase> operands) {
+        if (operands.size() < 2) return;
+        float ty = ((COSNumber) operands.get(1)).floatValue();
+        ctx.textLeading = -ty;
+        handleTd(ctx, operands);
+    }
+
+    private void handleTm(ParseContext ctx, List<COSBase> operands) {
+        if (operands.size() < 6) return;
+        float a = ((COSNumber) operands.get(0)).floatValue();
+        float b = ((COSNumber) operands.get(1)).floatValue();
+        float c = ((COSNumber) operands.get(2)).floatValue();
+        float d = ((COSNumber) operands.get(3)).floatValue();
+        float e = ((COSNumber) operands.get(4)).floatValue();
+        float f = ((COSNumber) operands.get(5)).floatValue();
+        ctx.textMatrix = new Matrix(a, b, c, d, e, f);
+        ctx.textLineMatrix = ctx.textMatrix.clone();
+    }
+
+    private void handleTStar(ParseContext ctx) {
         List<COSBase> operands = new ArrayList<>();
         operands.add(new COSFloat(0));
-        operands.add(new COSFloat(-textLeading));
-        handleTd(operands);
+        operands.add(new COSFloat(-ctx.textLeading));
+        handleTd(ctx, operands);
     }
 
     // --- Text Showing Operators ---
 
-    private void handleTj(List<COSBase> operands, List<TextRun> runs, int operatorIndex) throws IOException {
+    private void handleTj(ParseContext ctx, List<COSBase> operands, List<TextRun> runs, int operatorIndex) throws IOException {
         if (operands.isEmpty() || !(operands.get(0) instanceof COSString cosString)) return;
-        if (textMatrix == null || currentFont == null) return;
+        if (ctx.textMatrix == null || ctx.currentFont == null) return;
 
-        String text = decodeString(cosString);
+        String text = decodeString(ctx, cosString);
         if (text.isEmpty()) return;
 
-        float width = calculateStringWidth(text);
-        TextRun run = buildTextRun(text, width, TextRun.OperatorType.Tj, operatorIndex, -1);
+        float width = calculateStringWidth(ctx, text);
+        TextRun run = buildTextRun(ctx, text, width, TextRun.OperatorType.Tj, operatorIndex, -1);
         runs.add(run);
 
-        advanceTextPosition(text);
+        advanceTextPosition(ctx, text);
     }
 
-    private void handleTJ(List<COSBase> operands, List<TextRun> runs, int operatorIndex) throws IOException {
+    private void handleTJ(ParseContext ctx, List<COSBase> operands, List<TextRun> runs, int operatorIndex) throws IOException {
         if (operands.isEmpty() || !(operands.get(0) instanceof COSArray array)) return;
-        if (textMatrix == null || currentFont == null) return;
+        if (ctx.textMatrix == null || ctx.currentFont == null) return;
 
         int arrayIndex = 0;
         for (COSBase element : array) {
             if (element instanceof COSString cosString) {
-                String text = decodeString(cosString);
+                String text = decodeString(ctx, cosString);
                 if (!text.isEmpty()) {
-                    float width = calculateStringWidth(text);
-                    TextRun run = buildTextRun(text, width, TextRun.OperatorType.TJ, operatorIndex, arrayIndex);
+                    float width = calculateStringWidth(ctx, text);
+                    TextRun run = buildTextRun(ctx, text, width, TextRun.OperatorType.TJ, operatorIndex, arrayIndex);
                     runs.add(run);
-                    advanceTextPosition(text);
+                    advanceTextPosition(ctx, text);
                 }
             } else if (element instanceof COSNumber num) {
-                // Kerning adjustment: move text position
-                // Negative values move right, positive move left (in thousandths of text space unit)
                 float adjustment = num.floatValue();
-                float displacement = -adjustment / 1000f * currentFontSize * (horizontalScaling / 100f);
-                textMatrix = Matrix.getTranslateInstance(displacement, 0).multiply(textMatrix);
+                float displacement = -adjustment / 1000f * ctx.currentFontSize * (ctx.horizontalScaling / 100f);
+                ctx.textMatrix = Matrix.getTranslateInstance(displacement, 0).multiply(ctx.textMatrix);
             }
             arrayIndex++;
         }
     }
 
-    private void handleQuote(List<COSBase> operands, List<TextRun> runs, int operatorIndex) throws IOException {
-        handleTStar();
+    private void handleQuote(ParseContext ctx, List<COSBase> operands, List<TextRun> runs, int operatorIndex) throws IOException {
+        handleTStar(ctx);
         if (operands.isEmpty() || !(operands.get(0) instanceof COSString cosString)) return;
-        if (textMatrix == null || currentFont == null) return;
+        if (ctx.textMatrix == null || ctx.currentFont == null) return;
 
-        String text = decodeString(cosString);
+        String text = decodeString(ctx, cosString);
         if (text.isEmpty()) return;
 
-        float width = calculateStringWidth(text);
-        TextRun run = buildTextRun(text, width, TextRun.OperatorType.QUOTE, operatorIndex, -1);
+        float width = calculateStringWidth(ctx, text);
+        TextRun run = buildTextRun(ctx, text, width, TextRun.OperatorType.QUOTE, operatorIndex, -1);
         runs.add(run);
-        advanceTextPosition(text);
+        advanceTextPosition(ctx, text);
     }
 
-    private void handleDoubleQuote(List<COSBase> operands, List<TextRun> runs, int operatorIndex) throws IOException {
+    private void handleDoubleQuote(ParseContext ctx, List<COSBase> operands, List<TextRun> runs, int operatorIndex) throws IOException {
         if (operands.size() < 3) return;
-        wordSpacing = ((COSNumber) operands.get(0)).floatValue();
-        charSpacing = ((COSNumber) operands.get(1)).floatValue();
-        handleTStar();
+        ctx.wordSpacing = ((COSNumber) operands.get(0)).floatValue();
+        ctx.charSpacing = ((COSNumber) operands.get(1)).floatValue();
+        handleTStar(ctx);
 
         if (!(operands.get(2) instanceof COSString cosString)) return;
-        if (textMatrix == null || currentFont == null) return;
+        if (ctx.textMatrix == null || ctx.currentFont == null) return;
 
-        String text = decodeString(cosString);
+        String text = decodeString(ctx, cosString);
         if (text.isEmpty()) return;
 
-        float width = calculateStringWidth(text);
-        TextRun run = buildTextRun(text, width, TextRun.OperatorType.DOUBLE_QUOTE, operatorIndex, -1);
+        float width = calculateStringWidth(ctx, text);
+        TextRun run = buildTextRun(ctx, text, width, TextRun.OperatorType.DOUBLE_QUOTE, operatorIndex, -1);
         runs.add(run);
-        advanceTextPosition(text);
+        advanceTextPosition(ctx, text);
     }
 
     // --- Color Operators ---
 
-    private void handleGray(List<COSBase> operands) {
+    private void handleGray(ParseContext ctx, List<COSBase> operands) {
         if (!operands.isEmpty()) {
             float g = ((COSNumber) operands.get(0)).floatValue();
-            currentColor = new float[]{g, g, g};
+            ctx.currentColor = new float[]{g, g, g};
         }
     }
 
-    private void handleRGB(List<COSBase> operands) {
+    private void handleRGB(ParseContext ctx, List<COSBase> operands) {
         if (operands.size() >= 3) {
-            currentColor = new float[]{
+            ctx.currentColor = new float[]{
                 ((COSNumber) operands.get(0)).floatValue(),
                 ((COSNumber) operands.get(1)).floatValue(),
                 ((COSNumber) operands.get(2)).floatValue()
@@ -292,14 +296,13 @@ public class ContentStreamParser {
         }
     }
 
-    private void handleCMYK(List<COSBase> operands) {
+    private void handleCMYK(ParseContext ctx, List<COSBase> operands) {
         if (operands.size() >= 4) {
             float c = ((COSNumber) operands.get(0)).floatValue();
             float m = ((COSNumber) operands.get(1)).floatValue();
             float y = ((COSNumber) operands.get(2)).floatValue();
             float k = ((COSNumber) operands.get(3)).floatValue();
-            // CMYK to RGB approximation
-            currentColor = new float[]{
+            ctx.currentColor = new float[]{
                 (1 - c) * (1 - k),
                 (1 - m) * (1 - k),
                 (1 - y) * (1 - k)
@@ -309,56 +312,57 @@ public class ContentStreamParser {
 
     // --- Helper Methods ---
 
-    private TextRun buildTextRun(String text, float width, TextRun.OperatorType opType,
+    private TextRun buildTextRun(ParseContext ctx, String text, float width, TextRun.OperatorType opType,
                                  int operatorIndex, int tjArrayIndex) {
-        float x = textMatrix.getTranslateX();
-        float y = textMatrix.getTranslateY();
+        Matrix effectiveMatrix = ctx.textMatrix.multiply(ctx.ctm);
+        float x = effectiveMatrix.getTranslateX();
+        float y = effectiveMatrix.getTranslateY();
 
-        String fontName = currentFont.getName() != null ? currentFont.getName() : "Unknown";
+        String fontName = ctx.currentFont.getName() != null ? ctx.currentFont.getName() : "Unknown";
         float[] tm = {
-            textMatrix.getScaleX(), textMatrix.getShearY(),
-            textMatrix.getShearX(), textMatrix.getScaleY(),
-            textMatrix.getTranslateX(), textMatrix.getTranslateY()
+            ctx.textMatrix.getScaleX(), ctx.textMatrix.getShearY(),
+            ctx.textMatrix.getShearX(), ctx.textMatrix.getScaleY(),
+            ctx.textMatrix.getTranslateX(), ctx.textMatrix.getTranslateY()
         };
 
-        return new TextRun(text, x, y, width, currentFontSize, fontName,
-                currentFontResourceName, currentColor.clone(), tm, 0, operatorIndex,
+        return new TextRun(text, x, y, width, ctx.currentFontSize, fontName,
+                ctx.currentFontResourceName, ctx.currentColor.clone(), tm, 0, operatorIndex,
                 opType, tjArrayIndex);
     }
 
-    private void advanceTextPosition(String text) throws IOException {
+    private void advanceTextPosition(ParseContext ctx, String text) throws IOException {
         float tx = 0;
         for (int i = 0; i < text.length(); i++) {
             int codePoint = text.codePointAt(i);
             float charWidth;
             try {
-                charWidth = currentFont.getWidth(codePoint) / 1000f * currentFontSize;
+                charWidth = ctx.currentFont.getWidth(codePoint) / 1000f * ctx.currentFontSize;
             } catch (Exception e) {
-                charWidth = currentFontSize * 0.5f; // Fallback
+                charWidth = ctx.currentFontSize * 0.5f;
             }
             tx += charWidth;
-            tx += charSpacing;
+            tx += ctx.charSpacing;
             if (codePoint == ' ') {
-                tx += wordSpacing;
+                tx += ctx.wordSpacing;
             }
         }
-        tx *= (horizontalScaling / 100f);
-        textMatrix = Matrix.getTranslateInstance(tx, 0).multiply(textMatrix);
+        tx *= (ctx.horizontalScaling / 100f);
+        ctx.textMatrix = Matrix.getTranslateInstance(tx, 0).multiply(ctx.textMatrix);
     }
 
-    private String decodeString(COSString cosString) {
-        if (currentFont == null) return cosString.getString();
+    private String decodeString(ParseContext ctx, COSString cosString) {
+        if (ctx.currentFont == null) return cosString.getString();
 
         byte[] bytes = cosString.getBytes();
         StringBuilder sb = new StringBuilder();
 
-        if (currentFont instanceof org.apache.pdfbox.pdmodel.font.PDSimpleFont simpleFont) {
+        if (ctx.currentFont instanceof org.apache.pdfbox.pdmodel.font.PDSimpleFont simpleFont) {
             for (byte b : bytes) {
                 int code = b & 0xFF;
                 String unicode = simpleFont.toUnicode(code);
                 sb.append(unicode != null ? unicode : String.valueOf((char) code));
             }
-        } else if (currentFont instanceof org.apache.pdfbox.pdmodel.font.PDType0Font type0Font) {
+        } else if (ctx.currentFont instanceof org.apache.pdfbox.pdmodel.font.PDType0Font type0Font) {
             int i = 0;
             while (i < bytes.length) {
                 int code;
@@ -378,11 +382,11 @@ public class ContentStreamParser {
         return sb.toString();
     }
 
-    private float calculateStringWidth(String text) {
+    private float calculateStringWidth(ParseContext ctx, String text) {
         try {
-            return currentFont.getStringWidth(text) / 1000f * currentFontSize * (horizontalScaling / 100f);
+            return ctx.currentFont.getStringWidth(text) / 1000f * ctx.currentFontSize * (ctx.horizontalScaling / 100f);
         } catch (Exception e) {
-            return text.length() * currentFontSize * 0.5f;
+            return text.length() * ctx.currentFontSize * 0.5f;
         }
     }
 }

@@ -1,103 +1,103 @@
--- V1: Initial schema - Users and Authentication
-
-CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+-- V1: Initial schema for MySQL
 
 -- =============================================
 -- USERS
 -- =============================================
 CREATE TABLE users (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  CHAR(36) NOT NULL PRIMARY KEY,
     email               VARCHAR(255) NOT NULL UNIQUE,
-    email_verified      BOOLEAN NOT NULL DEFAULT FALSE,
+    email_verified      TINYINT(1) NOT NULL DEFAULT 0,
     password_hash       VARCHAR(255) NOT NULL,
     display_name        VARCHAR(100),
     avatar_url          VARCHAR(500),
     storage_used_bytes  BIGINT NOT NULL DEFAULT 0,
     storage_limit_bytes BIGINT NOT NULL DEFAULT 1073741824,
     role                VARCHAR(20) NOT NULL DEFAULT 'user',
-    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    last_login_at       TIMESTAMPTZ,
-    is_active           BOOLEAN NOT NULL DEFAULT TRUE
-);
+    created_at          DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    updated_at          DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+    last_login_at       DATETIME(6),
+    is_active           TINYINT(1) NOT NULL DEFAULT 1
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE INDEX idx_users_email ON users(email);
-CREATE INDEX idx_users_active ON users(is_active) WHERE is_active = TRUE;
+CREATE INDEX idx_users_active ON users(is_active);
 
 -- =============================================
 -- REFRESH TOKENS
 -- =============================================
 CREATE TABLE refresh_tokens (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    id          CHAR(36) NOT NULL PRIMARY KEY,
+    user_id     CHAR(36) NOT NULL,
     token_hash  VARCHAR(64) NOT NULL UNIQUE,
     device_info VARCHAR(500),
-    expires_at  TIMESTAMPTZ NOT NULL,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    revoked_at  TIMESTAMPTZ
-);
+    expires_at  DATETIME(6) NOT NULL,
+    created_at  DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    revoked_at  DATETIME(6),
+    CONSTRAINT fk_refresh_tokens_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE INDEX idx_refresh_tokens_user ON refresh_tokens(user_id);
 CREATE INDEX idx_refresh_tokens_hash ON refresh_tokens(token_hash);
-CREATE INDEX idx_refresh_tokens_expires ON refresh_tokens(expires_at)
-    WHERE revoked_at IS NULL;
+CREATE INDEX idx_refresh_tokens_expires ON refresh_tokens(expires_at);
 
 -- =============================================
 -- EMAIL VERIFICATION TOKENS
 -- =============================================
 CREATE TABLE email_verifications (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    id          CHAR(36) NOT NULL PRIMARY KEY,
+    user_id     CHAR(36) NOT NULL,
     token_hash  VARCHAR(64) NOT NULL UNIQUE,
-    expires_at  TIMESTAMPTZ NOT NULL,
-    used_at     TIMESTAMPTZ,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
+    expires_at  DATETIME(6) NOT NULL,
+    used_at     DATETIME(6),
+    created_at  DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    CONSTRAINT fk_email_verifications_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================
 -- PASSWORD RESET TOKENS
 -- =============================================
 CREATE TABLE password_resets (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    id          CHAR(36) NOT NULL PRIMARY KEY,
+    user_id     CHAR(36) NOT NULL,
     token_hash  VARCHAR(64) NOT NULL UNIQUE,
-    expires_at  TIMESTAMPTZ NOT NULL,
-    used_at     TIMESTAMPTZ,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
+    expires_at  DATETIME(6) NOT NULL,
+    used_at     DATETIME(6),
+    created_at  DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    CONSTRAINT fk_password_resets_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================
 -- GUEST SESSIONS
 -- =============================================
 CREATE TABLE guest_sessions (
-    id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                      CHAR(36) NOT NULL PRIMARY KEY,
     session_token           VARCHAR(64) NOT NULL UNIQUE,
-    ip_address              INET,
+    ip_address              VARCHAR(45),
     user_agent              TEXT,
-    created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    expires_at              TIMESTAMPTZ NOT NULL,
-    converted_to_user_id    UUID REFERENCES users(id),
-    is_expired              BOOLEAN NOT NULL DEFAULT FALSE,
-    document_count          INTEGER NOT NULL DEFAULT 0,
-    max_documents           INTEGER NOT NULL DEFAULT 3
-);
+    created_at              DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    expires_at              DATETIME(6) NOT NULL,
+    converted_to_user_id    CHAR(36),
+    is_expired              TINYINT(1) NOT NULL DEFAULT 0,
+    document_count          INT NOT NULL DEFAULT 0,
+    max_documents           INT NOT NULL DEFAULT 3,
+    CONSTRAINT fk_guest_sessions_user FOREIGN KEY (converted_to_user_id) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE INDEX idx_guest_sessions_token ON guest_sessions(session_token);
-CREATE INDEX idx_guest_sessions_expires ON guest_sessions(expires_at)
-    WHERE is_expired = FALSE;
+CREATE INDEX idx_guest_sessions_expires ON guest_sessions(expires_at);
 
 -- =============================================
 -- DOCUMENTS
 -- =============================================
 CREATE TABLE documents (
-    id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    owner_user_id           UUID REFERENCES users(id) ON DELETE SET NULL,
-    guest_session_id        UUID REFERENCES guest_sessions(id) ON DELETE SET NULL,
+    id                      CHAR(36) NOT NULL PRIMARY KEY,
+    owner_user_id           CHAR(36),
+    guest_session_id        CHAR(36),
 
     title                   VARCHAR(500) NOT NULL,
     original_filename       VARCHAR(500),
     file_size_bytes         BIGINT NOT NULL,
-    page_count              INTEGER NOT NULL,
+    page_count              INT NOT NULL,
     mime_type               VARCHAR(50) NOT NULL DEFAULT 'application/pdf',
 
     storage_key_original    VARCHAR(1000) NOT NULL,
@@ -108,50 +108,45 @@ CREATE TABLE documents (
     analysis_status         VARCHAR(30) NOT NULL DEFAULT 'pending',
 
     pdf_version             VARCHAR(10),
-    is_encrypted            BOOLEAN NOT NULL DEFAULT FALSE,
-    is_signed               BOOLEAN NOT NULL DEFAULT FALSE,
-    has_forms               BOOLEAN NOT NULL DEFAULT FALSE,
-    is_scanned              BOOLEAN,
+    is_encrypted            TINYINT(1) NOT NULL DEFAULT 0,
+    is_signed               TINYINT(1) NOT NULL DEFAULT 0,
+    has_forms               TINYINT(1) NOT NULL DEFAULT 0,
+    is_scanned              TINYINT(1),
 
-    created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    last_edited_at          TIMESTAMPTZ,
-    expires_at              TIMESTAMPTZ,
-    deleted_at              TIMESTAMPTZ,
+    created_at              DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    updated_at              DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+    last_edited_at          DATETIME(6),
+    expires_at              DATETIME(6),
+    deleted_at              DATETIME(6),
 
-    CONSTRAINT chk_document_owner CHECK (
-        (owner_user_id IS NOT NULL AND guest_session_id IS NULL) OR
-        (owner_user_id IS NULL AND guest_session_id IS NOT NULL)
-    )
-);
+    CONSTRAINT fk_documents_user FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE SET NULL,
+    CONSTRAINT fk_documents_guest FOREIGN KEY (guest_session_id) REFERENCES guest_sessions(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE INDEX idx_documents_owner ON documents(owner_user_id)
-    WHERE deleted_at IS NULL;
-CREATE INDEX idx_documents_guest ON documents(guest_session_id)
-    WHERE deleted_at IS NULL;
-CREATE INDEX idx_documents_expires ON documents(expires_at)
-    WHERE expires_at IS NOT NULL AND deleted_at IS NULL;
+CREATE INDEX idx_documents_owner ON documents(owner_user_id);
+CREATE INDEX idx_documents_guest ON documents(guest_session_id);
+CREATE INDEX idx_documents_expires ON documents(expires_at);
 CREATE INDEX idx_documents_status ON documents(status);
 
 -- =============================================
 -- DOCUMENT PAGES
 -- =============================================
 CREATE TABLE document_pages (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    document_id         UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
-    page_number         INTEGER NOT NULL,
-    width               NUMERIC(10,4) NOT NULL,
-    height              NUMERIC(10,4) NOT NULL,
-    rotation            INTEGER NOT NULL DEFAULT 0,
-    text_block_count    INTEGER NOT NULL DEFAULT 0,
-    image_count         INTEGER NOT NULL DEFAULT 0,
-    is_scanned          BOOLEAN NOT NULL DEFAULT FALSE,
-    has_selectable_text BOOLEAN NOT NULL DEFAULT TRUE,
+    id                  CHAR(36) NOT NULL PRIMARY KEY,
+    document_id         CHAR(36) NOT NULL,
+    page_number         INT NOT NULL,
+    width               DECIMAL(10,4) NOT NULL,
+    height              DECIMAL(10,4) NOT NULL,
+    rotation            INT NOT NULL DEFAULT 0,
+    text_block_count    INT NOT NULL DEFAULT 0,
+    image_count         INT NOT NULL DEFAULT 0,
+    is_scanned          TINYINT(1) NOT NULL DEFAULT 0,
+    has_selectable_text TINYINT(1) NOT NULL DEFAULT 1,
     thumbnail_key       VARCHAR(1000),
     analysis_data_key   VARCHAR(1000),
-
-    UNIQUE(document_id, page_number)
-);
+    UNIQUE KEY uk_doc_page (document_id, page_number),
+    CONSTRAINT fk_doc_pages_document FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE INDEX idx_doc_pages_document ON document_pages(document_id);
 
@@ -159,18 +154,18 @@ CREATE INDEX idx_doc_pages_document ON document_pages(document_id);
 -- DOCUMENT VERSIONS
 -- =============================================
 CREATE TABLE document_versions (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    document_id     UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
-    version_number  INTEGER NOT NULL,
+    id              CHAR(36) NOT NULL PRIMARY KEY,
+    document_id     CHAR(36) NOT NULL,
+    version_number  INT NOT NULL,
     storage_key     VARCHAR(1000) NOT NULL,
     file_size_bytes BIGINT NOT NULL,
     label           VARCHAR(200),
     created_by      VARCHAR(20) NOT NULL DEFAULT 'auto',
-    operation_count INTEGER NOT NULL DEFAULT 0,
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-
-    UNIQUE(document_id, version_number)
-);
+    operation_count INT NOT NULL DEFAULT 0,
+    created_at      DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    UNIQUE KEY uk_doc_version (document_id, version_number),
+    CONSTRAINT fk_doc_versions_document FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE INDEX idx_doc_versions_document ON document_versions(document_id);
 
@@ -178,20 +173,21 @@ CREATE INDEX idx_doc_versions_document ON document_versions(document_id);
 -- DOCUMENT OPERATIONS
 -- =============================================
 CREATE TABLE document_operations (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    document_id         UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    id                  CHAR(36) NOT NULL PRIMARY KEY,
+    document_id         CHAR(36) NOT NULL,
     sequence_number     BIGINT NOT NULL,
     operation_type      VARCHAR(50) NOT NULL,
-    page_number         INTEGER,
+    page_number         INT,
     target_object_id    VARCHAR(100),
-    parameters          JSONB NOT NULL,
-    inverse_parameters  JSONB,
-    is_undone           BOOLEAN NOT NULL DEFAULT FALSE,
-    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    version_id          UUID REFERENCES document_versions(id),
-
-    UNIQUE(document_id, sequence_number)
-);
+    parameters          JSON NOT NULL,
+    inverse_parameters  JSON,
+    is_undone           TINYINT(1) NOT NULL DEFAULT 0,
+    created_at          DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    version_id          CHAR(36),
+    UNIQUE KEY uk_doc_op_seq (document_id, sequence_number),
+    CONSTRAINT fk_doc_ops_document FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE,
+    CONSTRAINT fk_doc_ops_version FOREIGN KEY (version_id) REFERENCES document_versions(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE INDEX idx_doc_ops_document_seq ON document_operations(document_id, sequence_number);
 
@@ -199,18 +195,19 @@ CREATE INDEX idx_doc_ops_document_seq ON document_operations(document_id, sequen
 -- USER ASSETS
 -- =============================================
 CREATE TABLE user_assets (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    id              CHAR(36) NOT NULL PRIMARY KEY,
+    user_id         CHAR(36) NOT NULL,
     asset_type      VARCHAR(30) NOT NULL,
     label           VARCHAR(200),
     storage_key     VARCHAR(1000) NOT NULL,
     mime_type       VARCHAR(50),
-    file_size_bytes INTEGER,
+    file_size_bytes INT,
     signature_method VARCHAR(20),
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    last_used_at    TIMESTAMPTZ,
-    is_default      BOOLEAN NOT NULL DEFAULT FALSE
-);
+    created_at      DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    last_used_at    DATETIME(6),
+    is_default      TINYINT(1) NOT NULL DEFAULT 0,
+    CONSTRAINT fk_user_assets_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE INDEX idx_user_assets_user ON user_assets(user_id, asset_type);
 
@@ -218,21 +215,22 @@ CREATE INDEX idx_user_assets_user ON user_assets(user_id, asset_type);
 -- PROCESSING JOBS
 -- =============================================
 CREATE TABLE processing_jobs (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    document_id     UUID REFERENCES documents(id) ON DELETE SET NULL,
+    id              CHAR(36) NOT NULL PRIMARY KEY,
+    document_id     CHAR(36),
     job_type        VARCHAR(50) NOT NULL,
     status          VARCHAR(20) NOT NULL DEFAULT 'queued',
-    input_params    JSONB,
-    output_result   JSONB,
-    progress_percent INTEGER NOT NULL DEFAULT 0,
+    input_params    JSON,
+    output_result   JSON,
+    progress_percent INT NOT NULL DEFAULT 0,
     error_message   TEXT,
-    retry_count     INTEGER NOT NULL DEFAULT 0,
-    max_retries     INTEGER NOT NULL DEFAULT 3,
-    priority        INTEGER NOT NULL DEFAULT 5,
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    started_at      TIMESTAMPTZ,
-    completed_at    TIMESTAMPTZ
-);
+    retry_count     INT NOT NULL DEFAULT 0,
+    max_retries     INT NOT NULL DEFAULT 3,
+    priority        INT NOT NULL DEFAULT 5,
+    created_at      DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    started_at      DATETIME(6),
+    completed_at    DATETIME(6),
+    CONSTRAINT fk_jobs_document FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE INDEX idx_jobs_status ON processing_jobs(status, priority, created_at);
 CREATE INDEX idx_jobs_document ON processing_jobs(document_id);

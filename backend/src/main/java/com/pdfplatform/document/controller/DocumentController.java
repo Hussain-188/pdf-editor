@@ -172,9 +172,11 @@ public class DocumentController {
 
     @PostMapping("/{id}/analyze")
     public ResponseEntity<List<PageAnalysisResponse>> analyze(
-            @PathVariable UUID id) throws IOException {
+            @PathVariable UUID id,
+            @RequestParam(required = false) String guestToken,
+            @AuthenticationPrincipal User user) throws IOException {
 
-        Document doc = documentService.getById(id);
+        Document doc = getAuthorizedDocument(id, user, guestToken);
         String key = doc.getStorageKeyCurrent() != null ? doc.getStorageKeyCurrent() : doc.getStorageKeyOriginal();
         List<PageAnalysisResponse> analysis = textAnalysisService.analyzeAllPages(key);
 
@@ -185,9 +187,11 @@ public class DocumentController {
     @GetMapping("/{id}/pages/{pageNumber}/analysis")
     public ResponseEntity<PageAnalysisResponse> analyzePage(
             @PathVariable UUID id,
-            @PathVariable int pageNumber) throws IOException {
+            @PathVariable int pageNumber,
+            @RequestParam(required = false) String guestToken,
+            @AuthenticationPrincipal User user) throws IOException {
 
-        Document doc = documentService.getById(id);
+        Document doc = getAuthorizedDocument(id, user, guestToken);
         String key = doc.getStorageKeyCurrent() != null ? doc.getStorageKeyCurrent() : doc.getStorageKeyOriginal();
         PageAnalysisResponse analysis = textAnalysisService.analyzePage(key, pageNumber);
         return ResponseEntity.ok(analysis);
@@ -196,23 +200,31 @@ public class DocumentController {
     @PostMapping("/{id}/edit")
     public ResponseEntity<DocumentResponse> edit(
             @PathVariable UUID id,
-            @RequestBody EditRequest request) throws IOException {
+            @RequestBody EditRequest request,
+            @RequestParam(required = false) String guestToken,
+            @AuthenticationPrincipal User user) throws IOException {
 
-        Document doc = documentService.getById(id);
+        Document doc = getAuthorizedDocument(id, user, guestToken);
         Document edited = operationService.executeAndRecord(doc, request);
         return ResponseEntity.ok(toResponse(edited));
     }
 
     @PostMapping("/{id}/undo")
-    public ResponseEntity<DocumentResponse> undo(@PathVariable UUID id) throws IOException {
-        Document doc = documentService.getById(id);
+    public ResponseEntity<DocumentResponse> undo(
+            @PathVariable UUID id,
+            @RequestParam(required = false) String guestToken,
+            @AuthenticationPrincipal User user) throws IOException {
+        Document doc = getAuthorizedDocument(id, user, guestToken);
         Document result = operationService.undo(doc);
         return ResponseEntity.ok(toResponse(result));
     }
 
     @PostMapping("/{id}/redo")
-    public ResponseEntity<DocumentResponse> redo(@PathVariable UUID id) throws IOException {
-        Document doc = documentService.getById(id);
+    public ResponseEntity<DocumentResponse> redo(
+            @PathVariable UUID id,
+            @RequestParam(required = false) String guestToken,
+            @AuthenticationPrincipal User user) throws IOException {
+        Document doc = getAuthorizedDocument(id, user, guestToken);
         Document result = operationService.redo(doc);
         return ResponseEntity.ok(toResponse(result));
     }
@@ -220,16 +232,20 @@ public class DocumentController {
     @PostMapping("/{id}/ocr/{pageNumber}")
     public ResponseEntity<OcrService.OcrResult> ocrPage(
             @PathVariable UUID id,
-            @PathVariable int pageNumber) throws IOException {
-        Document doc = documentService.getById(id);
+            @PathVariable int pageNumber,
+            @RequestParam(required = false) String guestToken,
+            @AuthenticationPrincipal User user) throws IOException {
+        Document doc = getAuthorizedDocument(id, user, guestToken);
         OcrService.OcrResult result = ocrService.ocrPage(doc, pageNumber);
         return ResponseEntity.ok(result);
     }
 
     @PostMapping("/{id}/ocr")
     public ResponseEntity<List<OcrService.OcrResult>> ocrAllPages(
-            @PathVariable UUID id) throws IOException {
-        Document doc = documentService.getById(id);
+            @PathVariable UUID id,
+            @RequestParam(required = false) String guestToken,
+            @AuthenticationPrincipal User user) throws IOException {
+        Document doc = getAuthorizedDocument(id, user, guestToken);
         List<OcrService.OcrResult> results = ocrService.ocrAllPages(doc);
         return ResponseEntity.ok(results);
     }
@@ -238,9 +254,11 @@ public class DocumentController {
     public ResponseEntity<DocumentResponse> rotatePage(
             @PathVariable UUID id,
             @PathVariable int pageNumber,
-            @RequestBody Map<String, Integer> body) throws IOException {
+            @RequestBody Map<String, Integer> body,
+            @RequestParam(required = false) String guestToken,
+            @AuthenticationPrincipal User user) throws IOException {
         int degrees = body.getOrDefault("degrees", 90);
-        Document doc = documentService.getById(id);
+        Document doc = getAuthorizedDocument(id, user, guestToken);
         Document result = pageManagementService.rotatePage(doc, pageNumber, degrees);
         return ResponseEntity.ok(toResponse(result));
     }
@@ -248,8 +266,10 @@ public class DocumentController {
     @DeleteMapping("/{id}/pages/{pageNumber}")
     public ResponseEntity<DocumentResponse> deletePage(
             @PathVariable UUID id,
-            @PathVariable int pageNumber) throws IOException {
-        Document doc = documentService.getById(id);
+            @PathVariable int pageNumber,
+            @RequestParam(required = false) String guestToken,
+            @AuthenticationPrincipal User user) throws IOException {
+        Document doc = getAuthorizedDocument(id, user, guestToken);
         Document result = pageManagementService.deletePage(doc, pageNumber);
         return ResponseEntity.ok(toResponse(result));
     }
@@ -257,8 +277,10 @@ public class DocumentController {
     @PostMapping("/{id}/pages/{pageNumber}/duplicate")
     public ResponseEntity<DocumentResponse> duplicatePage(
             @PathVariable UUID id,
-            @PathVariable int pageNumber) throws IOException {
-        Document doc = documentService.getById(id);
+            @PathVariable int pageNumber,
+            @RequestParam(required = false) String guestToken,
+            @AuthenticationPrincipal User user) throws IOException {
+        Document doc = getAuthorizedDocument(id, user, guestToken);
         Document result = pageManagementService.duplicatePage(doc, pageNumber);
         return ResponseEntity.ok(toResponse(result));
     }
@@ -266,9 +288,11 @@ public class DocumentController {
     @PostMapping("/{id}/pages/insert-blank")
     public ResponseEntity<DocumentResponse> insertBlankPage(
             @PathVariable UUID id,
-            @RequestBody Map<String, Integer> body) throws IOException {
+            @RequestBody Map<String, Integer> body,
+            @RequestParam(required = false) String guestToken,
+            @AuthenticationPrincipal User user) throws IOException {
         int afterPage = body.getOrDefault("afterPage", 0);
-        Document doc = documentService.getById(id);
+        Document doc = getAuthorizedDocument(id, user, guestToken);
         Document result = pageManagementService.insertBlankPage(doc, afterPage);
         return ResponseEntity.ok(toResponse(result));
     }
@@ -276,18 +300,24 @@ public class DocumentController {
     @PostMapping("/{id}/pages/reorder")
     public ResponseEntity<DocumentResponse> reorderPages(
             @PathVariable UUID id,
-            @RequestBody Map<String, List<Integer>> body) throws IOException {
+            @RequestBody Map<String, List<Integer>> body,
+            @RequestParam(required = false) String guestToken,
+            @AuthenticationPrincipal User user) throws IOException {
         List<Integer> newOrder = body.get("order");
         if (newOrder == null || newOrder.isEmpty()) {
             throw new IllegalArgumentException("order is required");
         }
-        Document doc = documentService.getById(id);
+        Document doc = getAuthorizedDocument(id, user, guestToken);
         Document result = pageManagementService.reorderPages(doc, newOrder);
         return ResponseEntity.ok(toResponse(result));
     }
 
     @GetMapping("/{id}/versions")
-    public ResponseEntity<List<Map<String, Object>>> listVersions(@PathVariable UUID id) {
+    public ResponseEntity<List<Map<String, Object>>> listVersions(
+            @PathVariable UUID id,
+            @RequestParam(required = false) String guestToken,
+            @AuthenticationPrincipal User user) {
+        getAuthorizedDocument(id, user, guestToken);
         List<DocumentVersion> versions = versionService.listVersions(id);
         List<Map<String, Object>> response = versions.stream().map(v -> Map.<String, Object>of(
                 "id", v.getId().toString(),
@@ -302,8 +332,10 @@ public class DocumentController {
     @PostMapping("/{id}/versions")
     public ResponseEntity<Map<String, Object>> createVersion(
             @PathVariable UUID id,
-            @RequestBody(required = false) Map<String, String> body) throws IOException {
-        Document doc = documentService.getById(id);
+            @RequestBody(required = false) Map<String, String> body,
+            @RequestParam(required = false) String guestToken,
+            @AuthenticationPrincipal User user) throws IOException {
+        Document doc = getAuthorizedDocument(id, user, guestToken);
         String label = body != null ? body.get("label") : null;
         DocumentVersion version = versionService.createSnapshot(doc, label);
         return ResponseEntity.ok(Map.of(
@@ -315,7 +347,10 @@ public class DocumentController {
     @PostMapping("/{id}/versions/{versionId}/restore")
     public ResponseEntity<DocumentResponse> restoreVersion(
             @PathVariable UUID id,
-            @PathVariable UUID versionId) throws IOException {
+            @PathVariable UUID versionId,
+            @RequestParam(required = false) String guestToken,
+            @AuthenticationPrincipal User user) throws IOException {
+        getAuthorizedDocument(id, user, guestToken);
         Document doc = versionService.restoreVersion(id, versionId);
         return ResponseEntity.ok(toResponse(doc));
     }
@@ -324,8 +359,10 @@ public class DocumentController {
     @PostMapping("/{id}/export")
     public ResponseEntity<Map<String, String>> exportPdf(
             @PathVariable UUID id,
-            @RequestBody Map<String, Object> body) throws IOException {
-        Document doc = documentService.getById(id);
+            @RequestBody Map<String, Object> body,
+            @RequestParam(required = false) String guestToken,
+            @AuthenticationPrincipal User user) throws IOException {
+        Document doc = getAuthorizedDocument(id, user, guestToken);
         List<Integer> pageRange = body.containsKey("pageRange") ? (List<Integer>) body.get("pageRange") : null;
         boolean flatten = body.containsKey("flattenAnnotations") ? (boolean) body.get("flattenAnnotations") : true;
         var options = new ExportService.ExportOptions(pageRange, flatten, "png", 150);
@@ -337,8 +374,10 @@ public class DocumentController {
     @PostMapping("/{id}/export/images")
     public ResponseEntity<Map<String, String>> exportImages(
             @PathVariable UUID id,
-            @RequestBody Map<String, Object> body) throws IOException {
-        Document doc = documentService.getById(id);
+            @RequestBody Map<String, Object> body,
+            @RequestParam(required = false) String guestToken,
+            @AuthenticationPrincipal User user) throws IOException {
+        Document doc = getAuthorizedDocument(id, user, guestToken);
         String format = (String) body.getOrDefault("format", "png");
         int dpi = body.containsKey("dpi") ? ((Number) body.get("dpi")).intValue() : 150;
         List<Integer> pages = body.containsKey("pages") ? (List<Integer>) body.get("pages") : null;
@@ -347,10 +386,27 @@ public class DocumentController {
     }
 
     @PostMapping("/{id}/autosave")
-    public ResponseEntity<Map<String, String>> autoSave(@PathVariable UUID id) throws IOException {
-        Document doc = documentService.getById(id);
+    public ResponseEntity<Map<String, String>> autoSave(
+            @PathVariable UUID id,
+            @RequestParam(required = false) String guestToken,
+            @AuthenticationPrincipal User user) throws IOException {
+        Document doc = getAuthorizedDocument(id, user, guestToken);
         versionService.autoSave(doc);
         return ResponseEntity.ok(Map.of("status", "saved"));
+    }
+
+    private Document getAuthorizedDocument(UUID id, User user, String guestToken) {
+        Document doc = documentService.getById(id);
+        if (user != null && doc.getOwnerUser() != null && doc.getOwnerUser().getId().equals(user.getId())) {
+            return doc;
+        }
+        if (guestToken != null && doc.getGuestSession() != null) {
+            GuestSession session = guestSessionService.validateSession(guestToken);
+            if (session.getId().equals(doc.getGuestSession().getId())) {
+                return doc;
+            }
+        }
+        throw new org.springframework.security.access.AccessDeniedException("Access denied");
     }
 
     private DocumentResponse toResponse(Document doc) {

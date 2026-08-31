@@ -76,9 +76,10 @@ public class TextBlockExtractor {
         float verticalDistance = Math.abs(prev.getY() - curr.getY());
         float horizontalDistance = curr.getX() - (prev.getX() + prev.getWidth());
 
-        // Same line: group if within reasonable word spacing
+        // Same line: group if within reasonable word spacing (reject large negative gaps)
         if (verticalDistance < fontSize * 0.3f) {
-            return horizontalDistance < fontSize * WORD_SPACING_THRESHOLD;
+            return horizontalDistance >= -fontSize * 0.5f
+                    && horizontalDistance < fontSize * WORD_SPACING_THRESHOLD;
         }
 
         // Different lines: group if within line spacing threshold and horizontally aligned
@@ -101,10 +102,13 @@ public class TextBlockExtractor {
         float maxX = Float.MIN_VALUE, maxY = Float.MIN_VALUE;
 
         for (TextRun run : runs) {
+            float fontSize = run.getFontSize();
+            float ascent = fontSize * 0.8f;
+            float descent = fontSize * 0.25f;
             minX = Math.min(minX, run.getX());
-            minY = Math.min(minY, run.getY());
+            minY = Math.min(minY, run.getY() - descent);
             maxX = Math.max(maxX, run.getX() + run.getWidth());
-            maxY = Math.max(maxY, run.getY() + run.getFontSize());
+            maxY = Math.max(maxY, run.getY() + ascent);
         }
 
         float width = maxX - minX;

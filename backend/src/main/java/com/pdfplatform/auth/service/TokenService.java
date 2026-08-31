@@ -102,7 +102,7 @@ public class TokenService {
 
     @Transactional
     public void revokeAllUserTokens(User user) {
-        refreshTokenRepository.revokeAllByUser(user);
+        refreshTokenRepository.revokeAllByUser(user, java.time.Instant.now());
     }
 
     private String hashToken(String rawToken) {

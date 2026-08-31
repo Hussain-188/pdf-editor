@@ -59,23 +59,21 @@ public class PageManagementService {
         try (PDDocument pdf = loadPdf(doc)) {
             validatePageNumber(pdf, pageNumber);
             PDPage original = pdf.getPage(pageNumber - 1);
-            pdf.importPage(original);
 
-            PDDocument temp = new PDDocument();
-            temp.importPage(original);
-            ByteArrayOutputStream tempOut = new ByteArrayOutputStream();
-            temp.save(tempOut);
-            temp.close();
+            byte[] tempBytes;
+            try (PDDocument temp = new PDDocument()) {
+                temp.importPage(original);
+                ByteArrayOutputStream tempOut = new ByteArrayOutputStream();
+                temp.save(tempOut);
+                tempBytes = tempOut.toByteArray();
+            }
 
-            PDDocument tempDoc = Loader.loadPDF(tempOut.toByteArray());
-            PDPage cloned = tempDoc.getPage(0);
-
-            PDDocument finalDoc = loadPdf(doc);
-            finalDoc.getPages().insertAfter(cloned, finalDoc.getPage(pageNumber - 1));
-            Document result = savePdf(doc, finalDoc);
-            finalDoc.close();
-            tempDoc.close();
-            return result;
+            try (PDDocument tempDoc = Loader.loadPDF(tempBytes);
+                 PDDocument finalDoc = loadPdf(doc)) {
+                PDPage cloned = tempDoc.getPage(0);
+                finalDoc.getPages().insertAfter(cloned, finalDoc.getPage(pageNumber - 1));
+                return savePdf(doc, finalDoc);
+            }
         }
     }
 
@@ -108,14 +106,13 @@ public class PageManagementService {
                 }
             }
 
-            PDDocument reordered = new PDDocument();
-            for (int pageNum : newOrder) {
-                PDPage page = pdf.getPage(pageNum - 1);
-                reordered.importPage(page);
+            try (PDDocument reordered = new PDDocument()) {
+                for (int pageNum : newOrder) {
+                    PDPage page = pdf.getPage(pageNum - 1);
+                    reordered.importPage(page);
+                }
+                return savePdf(doc, reordered);
             }
-            Document result = savePdf(doc, reordered);
-            reordered.close();
-            return result;
         }
     }
 
@@ -155,8 +152,9 @@ public class PageManagementService {
 
     private PDDocument loadPdf(Document doc) throws IOException {
         String key = doc.getStorageKeyCurrent() != null ? doc.getStorageKeyCurrent() : doc.getStorageKeyOriginal();
-        InputStream is = storageService.download(key);
-        return Loader.loadPDF(is.readAllBytes());
+        try (InputStream is = storageService.download(key)) {
+            return Loader.loadPDF(is.readAllBytes());
+        }
     }
 
     private Document savePdf(Document doc, PDDocument pdf) throws IOException {

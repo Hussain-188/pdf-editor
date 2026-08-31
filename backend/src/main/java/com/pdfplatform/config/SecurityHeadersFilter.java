@@ -23,9 +23,9 @@ public class SecurityHeadersFilter implements Filter {
         httpResp.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
         httpResp.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
         httpResp.setHeader("Content-Security-Policy",
-                "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
+                "default-src 'self'; script-src 'self' blob:; style-src 'self' 'unsafe-inline'; " +
                 "img-src 'self' data: blob:; font-src 'self'; connect-src 'self' http://localhost:* https://*; " +
-                "frame-ancestors 'none';");
+                "worker-src 'self' blob:; frame-ancestors 'none';");
 
         chain.doFilter(request, response);
     }

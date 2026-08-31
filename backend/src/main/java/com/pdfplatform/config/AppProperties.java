@@ -22,25 +22,10 @@ public class AppProperties {
     public void setUpload(Upload upload) { this.upload = upload; }
 
     public static class Storage {
-        private String endpoint;
-        private String publicEndpoint;
-        private String accessKey;
-        private String secretKey;
-        private String bucket;
-        private String region;
+        private String basePath = "./storage";
 
-        public String getEndpoint() { return endpoint; }
-        public void setEndpoint(String endpoint) { this.endpoint = endpoint; }
-        public String getPublicEndpoint() { return publicEndpoint; }
-        public void setPublicEndpoint(String publicEndpoint) { this.publicEndpoint = publicEndpoint; }
-        public String getAccessKey() { return accessKey; }
-        public void setAccessKey(String accessKey) { this.accessKey = accessKey; }
-        public String getSecretKey() { return secretKey; }
-        public void setSecretKey(String secretKey) { this.secretKey = secretKey; }
-        public String getBucket() { return bucket; }
-        public void setBucket(String bucket) { this.bucket = bucket; }
-        public String getRegion() { return region; }
-        public void setRegion(String region) { this.region = region; }
+        public String getBasePath() { return basePath; }
+        public void setBasePath(String basePath) { this.basePath = basePath; }
     }
 
     public static class Jwt {

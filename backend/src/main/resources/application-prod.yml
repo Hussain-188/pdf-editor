@@ -12,6 +12,11 @@ spring:
     hibernate:
       ddl-auto: validate
     show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        type:
+          preferred_uuid_jdbc_type: CHAR
 
   servlet:
     multipart:
@@ -27,16 +32,12 @@ server:
 
 app:
   storage:
-    endpoint: ${S3_ENDPOINT:}
-    access-key: ${S3_ACCESS_KEY}
-    secret-key: ${S3_SECRET_KEY}
-    bucket: ${S3_BUCKET:pdf-platform}
-    region: ${S3_REGION:us-east-1}
+    base-path: ${STORAGE_PATH:./storage}
 
   jwt:
     secret: ${JWT_SECRET}
-    access-expiration: 900000
-    refresh-expiration: 2592000000
+    access-token-expiry: 900000
+    refresh-token-expiry: 2592000000
 
 logging:
   level:

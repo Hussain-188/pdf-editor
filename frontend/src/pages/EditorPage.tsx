@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { getDocument } from 'pdfjs-dist'
 import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist'
@@ -6,10 +6,12 @@ import '../lib/pdfWorker'
 import api from '../lib/api'
 import { useViewport } from '../hooks/useViewport'
 import { useEditorStore } from '../stores/editorStore'
-import Toolbar from '../components/editor/Toolbar'
+import { useAnnotationStore } from '../stores/annotationStore'
+import Toolbar, { type EditorMode } from '../components/editor/Toolbar'
 import AnnotationToolbar from '../components/editor/AnnotationToolbar'
 import PageRenderer from '../components/editor/PageRenderer'
 import PagePanel from '../components/editor/PagePanel'
+import PropertiesPanel from '../components/editor/PropertiesPanel'
 import VersionHistoryPanel from '../components/editor/VersionHistoryPanel'
 import ExportDialog from '../components/editor/ExportDialog'
 
@@ -19,9 +21,14 @@ export default function EditorPage() {
   const { viewport, zoomIn, zoomOut, setScale } = useViewport(1.0)
   const analyzeDocument = useEditorStore((s) => s.analyzeDocument)
   const analysisLoading = useEditorStore((s) => s.analysisLoading)
+  const selectedBlockId = useEditorStore((s) => s.selectedBlockId)
+  const pageAnalyses = useEditorStore((s) => s.pageAnalyses)
+  const selectBlock = useEditorStore((s) => s.selectBlock)
   const undo = useEditorStore((s) => s.undo)
   const redo = useEditorStore((s) => s.redo)
   const setDocumentId = useEditorStore((s) => s.setDocumentId)
+  const loadAnnotations = useAnnotationStore((s) => s.loadAnnotations)
+  const clearAnnotations = useAnnotationStore((s) => s.clearAnnotations)
 
   const [pdfDoc, setPdfDoc] = useState<PDFDocumentProxy | null>(null)
   const [pages, setPages] = useState<PDFPageProxy[]>([])
@@ -29,17 +36,29 @@ export default function EditorPage() {
   const [docTitle, setDocTitle] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [showPagePanel] = useState(true)
+  const [editorMode, setEditorMode] = useState<EditorMode>('edit')
   const [showVersionPanel, setShowVersionPanel] = useState(false)
   const [showExportDialog, setShowExportDialog] = useState(false)
-  const [thumbnailUrls] = useState<Map<number, string>>(new Map())
+  const [thumbnailUrls, setThumbnailUrls] = useState<Map<number, string>>(new Map())
+  const [saving, setSaving] = useState(false)
+  const [operationError, setOperationError] = useState<string | null>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const autoSaveTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const selectedBlock = useMemo(() => {
+    if (!selectedBlockId) return null
+    for (const [pageNum, analysis] of pageAnalyses) {
+      const block = analysis.textBlocks.find((b) => b.id === selectedBlockId)
+      if (block) return { block, pageNumber: pageNum }
+    }
+    return null
+  }, [selectedBlockId, pageAnalyses])
 
   useEffect(() => {
     if (!id) return
     setDocumentId(id)
     loadDocument(id)
+    loadAnnotations(id)
 
     autoSaveTimerRef.current = setInterval(() => {
       api.post(`/documents/${id}/autosave`).catch(() => {})
@@ -47,6 +66,7 @@ export default function EditorPage() {
 
     return () => {
       pdfDoc?.cleanup()
+      clearAnnotations()
       if (autoSaveTimerRef.current) clearInterval(autoSaveTimerRef.current)
     }
   }, [id])
@@ -61,10 +81,27 @@ export default function EditorPage() {
         e.preventDefault()
         redo()
       }
+      if (e.key === 'Escape') {
+        selectBlock(null)
+      }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [undo, redo])
+  }, [undo, redo, selectBlock])
+
+  const generateThumbnails = useCallback(async (doc: PDFDocumentProxy) => {
+    const newThumbnails = new Map<number, string>()
+    for (let i = 1; i <= doc.numPages; i++) {
+      const page = await doc.getPage(i)
+      const vp = page.getViewport({ scale: 0.2 })
+      const canvas = document.createElement('canvas')
+      canvas.width = vp.width
+      canvas.height = vp.height
+      await page.render({ canvas, viewport: vp }).promise
+      newThumbnails.set(i, canvas.toDataURL())
+    }
+    setThumbnailUrls(newThumbnails)
+  }, [])
 
   const loadDocument = async (docId: string) => {
     try {
@@ -72,8 +109,10 @@ export default function EditorPage() {
       setDocTitle(docInfo.title)
 
       const { data: urlData } = await api.get(`/documents/${docId}/url`)
-      const loadingTask = getDocument(urlData.url)
-      const doc = await loadingTask.promise
+      const pdfResponse = await fetch(urlData.url)
+      if (!pdfResponse.ok) throw new Error('Failed to download PDF')
+      const pdfData = await pdfResponse.arrayBuffer()
+      const doc = await getDocument({ data: pdfData }).promise
       setPdfDoc(doc)
 
       const loadedPages: PDFPageProxy[] = []
@@ -84,9 +123,10 @@ export default function EditorPage() {
       setPages(loadedPages)
       setLoading(false)
 
+      generateThumbnails(doc)
       analyzeDocument(docId)
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to load document')
+      setError(err.response?.data?.error || err.message || 'Failed to load document')
       setLoading(false)
     }
   }
@@ -99,7 +139,10 @@ export default function EditorPage() {
 
       const { data: urlData } = await api.get(`/documents/${id}/url`)
       pdfDoc?.cleanup()
-      const doc = await getDocument(urlData.url).promise
+      const pdfResponse = await fetch(urlData.url)
+      if (!pdfResponse.ok) throw new Error('Failed to download PDF')
+      const pdfData = await pdfResponse.arrayBuffer()
+      const doc = await getDocument({ data: pdfData }).promise
       setPdfDoc(doc)
 
       const loadedPages: PDFPageProxy[] = []
@@ -107,15 +150,17 @@ export default function EditorPage() {
         loadedPages.push(await doc.getPage(i))
       }
       setPages(loadedPages)
+      generateThumbnails(doc)
     } catch { /* ignore reload errors */ }
-  }, [id, pdfDoc])
+  }, [id, pdfDoc, generateThumbnails])
 
   const handlePageAction = useCallback(async (action: () => Promise<any>) => {
     try {
       await action()
       await reloadDocument()
     } catch (err: any) {
-      setError(err.response?.data?.error || err.message || 'Page operation failed')
+      setOperationError(err.response?.data?.error || err.message || 'Operation failed')
+      setTimeout(() => setOperationError(null), 5000)
     }
   }, [reloadDocument])
 
@@ -138,6 +183,15 @@ export default function EditorPage() {
   const handleReorder = useCallback((newOrder: number[]) => {
     handlePageAction(() => api.post(`/documents/${id}/pages/reorder`, { order: newOrder }))
   }, [id, handlePageAction])
+
+  const handleSave = useCallback(async () => {
+    if (!id) return
+    setSaving(true)
+    try {
+      await api.post(`/documents/${id}/versions`, { label: 'Manual save' })
+    } catch { /* ignore */ }
+    finally { setSaving(false) }
+  }, [id])
 
   const scrollToPage = useCallback((page: number) => {
     const container = scrollContainerRef.current
@@ -167,12 +221,22 @@ export default function EditorPage() {
     setCurrentPage(current)
   }, [pages.length])
 
+  const handlePropertiesUpdate = useCallback(() => {
+    if (id) {
+      analyzeDocument(id)
+      reloadDocument()
+    }
+  }, [id, analyzeDocument, reloadDocument])
+
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600 mx-auto mb-3" />
-          <p className="text-gray-600">Loading document...</p>
+          <div className="relative w-12 h-12 mx-auto mb-4">
+            <div className="absolute inset-0 rounded-full border-2 border-gray-200" />
+            <div className="absolute inset-0 rounded-full border-2 border-blue-500 border-t-transparent animate-spin" />
+          </div>
+          <p className="text-sm text-gray-500 font-medium">Loading document...</p>
         </div>
       </div>
     )
@@ -180,10 +244,20 @@ export default function EditorPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100">
-        <div className="text-center">
-          <p className="text-red-600 mb-4">{error}</p>
-          <button onClick={() => navigate(-1)} className="text-primary-600 hover:underline">Go back</button>
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center max-w-sm">
+          <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-red-50 flex items-center justify-center">
+            <svg className="w-6 h-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+            </svg>
+          </div>
+          <p className="text-sm text-red-600 mb-4">{error}</p>
+          <button
+            onClick={() => navigate(-1)}
+            className="px-4 py-2 text-sm text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors font-medium"
+          >
+            Go back
+          </button>
         </div>
       </div>
     )
@@ -196,35 +270,42 @@ export default function EditorPage() {
         currentPage={currentPage}
         totalPages={pages.length}
         documentTitle={docTitle}
+        documentId={id}
         onZoomIn={zoomIn}
         onZoomOut={zoomOut}
         onScaleChange={setScale}
         onBack={() => navigate('/dashboard')}
         onUndo={undo}
         onRedo={redo}
+        onExport={() => setShowExportDialog(true)}
+        onShowHistory={() => setShowVersionPanel(true)}
+        onSave={handleSave}
+        editorMode={editorMode}
+        onModeChange={setEditorMode}
       />
-      <AnnotationToolbar />
+
+      <AnnotationToolbar visible={editorMode === 'annotate'} />
 
       <div className="flex-1 flex overflow-hidden">
-        {showPagePanel && (
-          <PagePanel
-            pageCount={pages.length}
-            currentPage={currentPage}
-            scale={viewport.scale}
-            onPageClick={scrollToPage}
-            onRotate={handleRotate}
-            onDelete={handleDeletePage}
-            onDuplicate={handleDuplicate}
-            onInsertBlank={handleInsertBlank}
-            onReorder={handleReorder}
-            thumbnailUrls={thumbnailUrls}
-          />
-        )}
+        <PagePanel
+          pageCount={pages.length}
+          currentPage={currentPage}
+          scale={viewport.scale}
+          onPageClick={scrollToPage}
+          onRotate={handleRotate}
+          onDelete={handleDeletePage}
+          onDuplicate={handleDuplicate}
+          onInsertBlank={handleInsertBlank}
+          onReorder={handleReorder}
+          thumbnailUrls={thumbnailUrls}
+        />
 
         <div
           ref={scrollContainerRef}
           onScroll={handleScroll}
-          className="flex-1 overflow-auto py-4"
+          onClick={() => selectBlock(null)}
+          className="flex-1 overflow-auto py-6 px-4"
+          style={{ background: 'linear-gradient(180deg, #f1f5f9 0%, #e2e8f0 100%)' }}
         >
           {pages.map((page, index) => (
             <PageRenderer
@@ -232,11 +313,23 @@ export default function EditorPage() {
               page={page}
               scale={viewport.scale}
               pageNumber={index + 1}
-              showOverlay={!analysisLoading}
+              showOverlay={editorMode === 'edit' && !analysisLoading}
               documentId={id}
+              onDocumentChanged={reloadDocument}
+              onError={(msg) => { setOperationError(msg); setTimeout(() => setOperationError(null), 5000) }}
             />
           ))}
         </div>
+
+        {editorMode === 'edit' && selectedBlock && id && (
+          <PropertiesPanel
+            block={selectedBlock.block}
+            documentId={id}
+            pageNumber={selectedBlock.pageNumber}
+            onUpdate={handlePropertiesUpdate}
+            onClose={() => selectBlock(null)}
+          />
+        )}
 
         {id && (
           <VersionHistoryPanel
@@ -255,6 +348,20 @@ export default function EditorPage() {
           open={showExportDialog}
           onClose={() => setShowExportDialog(false)}
         />
+      )}
+
+      {saving && (
+        <div className="fixed bottom-4 right-4 bg-gray-800 text-white text-xs px-3 py-2 rounded-lg shadow-lg flex items-center gap-2 z-50">
+          <div className="w-3 h-3 rounded-full border-2 border-white border-t-transparent animate-spin" />
+          Saving...
+        </div>
+      )}
+
+      {operationError && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-red-600 text-white text-sm px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 z-50">
+          <span>{operationError}</span>
+          <button onClick={() => setOperationError(null)} className="text-white/80 hover:text-white font-bold">×</button>
+        </div>
       )}
     </div>
   )

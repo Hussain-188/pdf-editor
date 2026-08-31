@@ -11,9 +11,11 @@ interface PageRendererProps {
   showOverlay?: boolean
   documentId?: string
   onRendered?: () => void
+  onDocumentChanged?: () => void
+  onError?: (message: string) => void
 }
 
-export default function PageRenderer({ page, scale, pageNumber, showOverlay = false, documentId, onRendered }: PageRendererProps) {
+export default function PageRenderer({ page, scale, pageNumber, showOverlay = false, documentId, onRendered, onDocumentChanged, onError }: PageRendererProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const textLayerRef = useRef<HTMLDivElement>(null)
   const renderTaskRef = useRef<any>(null)
@@ -77,21 +79,28 @@ export default function PageRenderer({ page, scale, pageNumber, showOverlay = fa
 
   return (
     <div
-      className="relative bg-white shadow-md mx-auto mb-4"
+      className="relative bg-white shadow-lg mx-auto mb-6 rounded-sm"
       style={{ width: dimensions.width, height: dimensions.height }}
       data-page-number={pageNumber}
     >
       <canvas ref={canvasRef} className="block" />
       <div
         ref={textLayerRef}
-        className="absolute inset-0 overflow-hidden opacity-25 leading-none"
-        style={{ fontSize: 0 }}
+        className="absolute inset-0 overflow-hidden leading-none"
+        style={{
+          fontSize: 0,
+          opacity: showOverlay ? 0 : 0.25,
+          pointerEvents: showOverlay ? 'none' : 'auto',
+        }}
       />
       {showOverlay && (
         <TextBlockOverlay
           pageNumber={pageNumber}
           pageHeight={page.getViewport({ scale: 1 }).height}
           scale={scale}
+          documentId={documentId}
+          onDocumentChanged={onDocumentChanged}
+          onError={onError}
         />
       )}
       {documentId && (

@@ -2,101 +2,75 @@ package com.pdfplatform.storage;
 
 import com.pdfplatform.config.AppProperties;
 import org.springframework.stereotype.Service;
-import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
-import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
-import software.amazon.awssdk.core.sync.RequestBody;
-import software.amazon.awssdk.regions.Region;
-import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.S3Configuration;
-import software.amazon.awssdk.services.s3.model.*;
-import software.amazon.awssdk.services.s3.presigner.S3Presigner;
-import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 
 import jakarta.annotation.PostConstruct;
-import java.io.InputStream;
-import java.net.URI;
+import java.io.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.time.Duration;
+import java.util.Base64;
 
 @Service
 public class StorageService {
 
     private final AppProperties appProperties;
-    private S3Client s3Client;
-    private S3Presigner presigner;
+    private Path basePath;
 
     public StorageService(AppProperties appProperties) {
         this.appProperties = appProperties;
     }
 
     @PostConstruct
-    public void init() {
-        var storage = appProperties.getStorage();
-        var credentials = StaticCredentialsProvider.create(
-                AwsBasicCredentials.create(storage.getAccessKey(), storage.getSecretKey()));
-
-        var builder = S3Client.builder()
-                .credentialsProvider(credentials)
-                .region(Region.of(storage.getRegion()));
-
-        var presignerBuilder = S3Presigner.builder()
-                .credentialsProvider(credentials)
-                .region(Region.of(storage.getRegion()));
-
-        if (storage.getEndpoint() != null && !storage.getEndpoint().isBlank()) {
-            URI endpoint = URI.create(storage.getEndpoint());
-            S3Configuration s3Config = S3Configuration.builder().pathStyleAccessEnabled(true).build();
-            builder.endpointOverride(endpoint).serviceConfiguration(s3Config);
-            presignerBuilder.endpointOverride(endpoint).serviceConfiguration(s3Config);
-        }
-
-        this.s3Client = builder.build();
-        this.presigner = presignerBuilder.build();
+    public void init() throws IOException {
+        this.basePath = Paths.get(appProperties.getStorage().getBasePath()).toAbsolutePath().normalize();
+        Files.createDirectories(basePath);
     }
 
     public void upload(String key, InputStream inputStream, long contentLength, String contentType) {
-        PutObjectRequest request = PutObjectRequest.builder()
-                .bucket(appProperties.getStorage().getBucket())
-                .key(key)
-                .contentType(contentType)
-                .build();
-
-        s3Client.putObject(request, RequestBody.fromInputStream(inputStream, contentLength));
+        try {
+            Path filePath = basePath.resolve(key);
+            Files.createDirectories(filePath.getParent());
+            Files.copy(inputStream, filePath, StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to store file: " + key, e);
+        }
     }
 
     public InputStream download(String key) {
-        GetObjectRequest request = GetObjectRequest.builder()
-                .bucket(appProperties.getStorage().getBucket())
-                .key(key)
-                .build();
-
-        return s3Client.getObject(request);
+        try {
+            Path filePath = basePath.resolve(key);
+            return new FileInputStream(filePath.toFile());
+        } catch (FileNotFoundException e) {
+            throw new RuntimeException("File not found: " + key, e);
+        }
     }
 
     public void delete(String key) {
-        DeleteObjectRequest request = DeleteObjectRequest.builder()
-                .bucket(appProperties.getStorage().getBucket())
-                .key(key)
-                .build();
-
-        s3Client.deleteObject(request);
+        try {
+            Path filePath = basePath.resolve(key);
+            Files.deleteIfExists(filePath);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to delete file: " + key, e);
+        }
     }
 
     public String generatePresignedDownloadUrl(String key, Duration duration) {
-        GetObjectPresignRequest presignRequest = GetObjectPresignRequest.builder()
-                .signatureDuration(duration)
-                .getObjectRequest(b -> b.bucket(appProperties.getStorage().getBucket()).key(key))
-                .build();
+        String encodedKey = Base64.getUrlEncoder().withoutPadding().encodeToString(key.getBytes());
+        return "/api/storage/files/" + encodedKey;
+    }
 
-        String url = presigner.presignGetObject(presignRequest).url().toString();
-
-        String publicEndpoint = appProperties.getStorage().getPublicEndpoint();
-        String internalEndpoint = appProperties.getStorage().getEndpoint();
-        if (publicEndpoint != null && !publicEndpoint.isBlank()
-                && internalEndpoint != null && !internalEndpoint.equals(publicEndpoint)) {
-            url = url.replace(internalEndpoint, publicEndpoint);
+    public Path resolve(String key) {
+        Path resolved = basePath.resolve(key).normalize();
+        if (!resolved.startsWith(basePath)) {
+            throw new IllegalArgumentException("Invalid storage key");
         }
+        return resolved;
+    }
 
-        return url;
+    public Path getBasePath() {
+        return basePath;
     }
 
     public String buildStorageKey(String... parts) {

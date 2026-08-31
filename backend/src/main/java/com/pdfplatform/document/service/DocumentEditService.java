@@ -68,7 +68,10 @@ public class DocumentEditService {
 
             switch (request.operation()) {
                 case "TEXT_REPLACE":
-                    contentStreamEditor.replaceText(document, pageIndex, targetBlock, request.oldText(), request.newText());
+                    boolean replaced = contentStreamEditor.replaceText(document, pageIndex, targetBlock, request.oldText(), request.newText());
+                    if (!replaced) {
+                        throw new IllegalArgumentException("Text replacement failed — could not find the target text in the content stream");
+                    }
                     break;
                 case "FONT_SIZE_CHANGE":
                     if (request.fontSize() != null) {
@@ -103,10 +106,11 @@ public class DocumentEditService {
 
     private TextBlock findTargetBlock(List<TextBlock> blocks, EditRequest request) {
         if (request.textBlockId() != null) {
-            return blocks.stream()
+            TextBlock match = blocks.stream()
                     .filter(b -> b.getId().equals(request.textBlockId()))
                     .findFirst()
                     .orElse(null);
+            if (match != null) return match;
         }
         if (request.oldText() != null) {
             return blocks.stream()

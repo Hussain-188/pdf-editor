@@ -1,22 +1,42 @@
+import { useState, useCallback } from 'react'
 import { useEditorStore } from '../../stores/editorStore'
 import { useCoordinateTransform } from '../../hooks/useCoordinateTransform'
+import InlineTextEditor from './InlineTextEditor'
 
 interface TextBlockOverlayProps {
   pageNumber: number
   pageHeight: number
   scale: number
+  documentId?: string
+  onDocumentChanged?: () => void
+  onError?: (message: string) => void
 }
 
-export default function TextBlockOverlay({ pageNumber, pageHeight, scale }: TextBlockOverlayProps) {
+export default function TextBlockOverlay({ pageNumber, pageHeight, scale, documentId, onDocumentChanged, onError }: TextBlockOverlayProps) {
   const analysis = useEditorStore((s) => s.getPageAnalysis(pageNumber))
   const selectedBlockId = useEditorStore((s) => s.selectedBlockId)
   const selectBlock = useEditorStore((s) => s.selectBlock)
+  const analyzeDocument = useEditorStore((s) => s.analyzeDocument)
+  const docId = useEditorStore((s) => s.documentId)
   const { pdfRectToScreen } = useCoordinateTransform(scale, pageHeight)
+
+  const [editingBlockId, setEditingBlockId] = useState<string | null>(null)
+
+  const effectiveDocId = documentId || docId
+
+  const handleEditComplete = useCallback((changed: boolean) => {
+    setEditingBlockId(null)
+    selectBlock(null)
+    if (changed && effectiveDocId) {
+      analyzeDocument(effectiveDocId)
+      onDocumentChanged?.()
+    }
+  }, [effectiveDocId, analyzeDocument, selectBlock, onDocumentChanged])
 
   if (!analysis) return null
 
   return (
-    <div className="absolute inset-0 pointer-events-none">
+    <div className="absolute inset-0">
       {analysis.textBlocks.map((block) => {
         const rect = pdfRectToScreen({
           x: block.x,
@@ -25,20 +45,36 @@ export default function TextBlockOverlay({ pageNumber, pageHeight, scale }: Text
           height: block.height,
         })
 
+        const isEditing = editingBlockId === block.id
         const isSelected = selectedBlockId === block.id
-        const editClass = block.editability.canEdit
-          ? 'border-green-400/50 hover:border-green-500 hover:bg-green-500/5'
-          : 'border-yellow-400/50 hover:border-yellow-500 hover:bg-yellow-500/5'
+
+        if (isEditing && effectiveDocId) {
+          return (
+            <InlineTextEditor
+              key={block.id}
+              block={block}
+              pageNumber={pageNumber}
+              pageHeight={pageHeight}
+              scale={scale}
+              documentId={effectiveDocId}
+              onEditComplete={handleEditComplete}
+              onError={onError}
+            />
+          )
+        }
 
         return (
           <div
             key={block.id}
             onClick={(e) => {
               e.stopPropagation()
-              selectBlock(isSelected ? null : block.id)
+              selectBlock(block.id)
+              setEditingBlockId(block.id)
             }}
-            className={`absolute border cursor-pointer pointer-events-auto transition-colors ${
-              isSelected ? 'border-primary-500 bg-primary-500/10 border-2' : editClass
+            className={`absolute pointer-events-auto transition-colors duration-100 ${
+              isSelected
+                ? 'border-2 border-blue-500 bg-blue-500/5 cursor-text'
+                : 'border border-transparent hover:border-blue-400/50 hover:bg-blue-50/30 cursor-text'
             }`}
             style={{
               left: rect.x,
@@ -46,7 +82,7 @@ export default function TextBlockOverlay({ pageNumber, pageHeight, scale }: Text
               width: rect.width,
               height: rect.height,
             }}
-            title={block.editability.canEdit ? block.text : `Not editable: ${block.editability.reason}`}
+            title="Click to edit"
           />
         )
       })}

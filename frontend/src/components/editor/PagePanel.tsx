@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback } from 'react'
+import { RotateCw, Trash2, Copy, Plus } from 'lucide-react'
 
 interface PagePanelProps {
   pageCount: number
@@ -27,6 +28,7 @@ export default function PagePanel({
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
   const [contextMenu, setContextMenu] = useState<{ page: number; x: number; y: number } | null>(null)
+  const [hoveredPage, setHoveredPage] = useState<number | null>(null)
   const panelRef = useRef<HTMLDivElement>(null)
 
   const pages = Array.from({ length: pageCount }, (_, i) => i + 1)
@@ -69,25 +71,27 @@ export default function PagePanel({
   return (
     <div
       ref={panelRef}
-      className="w-48 bg-white border-r flex flex-col overflow-hidden"
+      className="w-52 bg-gray-50 border-r border-gray-200 flex flex-col overflow-hidden shrink-0"
       onClick={closeContextMenu}
     >
-      <div className="px-3 py-2 border-b flex items-center justify-between">
-        <span className="text-xs font-medium text-gray-700">Pages</span>
+      <div className="px-3 py-2.5 border-b border-gray-200 flex items-center justify-between bg-white">
+        <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Pages</span>
         <button
           onClick={() => onInsertBlank(pageCount)}
-          className="text-xs text-primary-600 hover:text-primary-800"
+          className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium transition-colors"
           title="Add blank page"
         >
-          + Page
+          <Plus size={12} />
+          Add
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-2 space-y-2">
+      <div className="flex-1 overflow-y-auto p-3 space-y-3">
         {pages.map((page) => {
           const thumbUrl = thumbnailUrls.get(page)
           const isActive = page === currentPage
           const isDragOver = page === dragOverIndex && dragIndex !== null
+          const isHovered = hoveredPage === page
 
           return (
             <div
@@ -99,24 +103,65 @@ export default function PagePanel({
               onDragEnd={() => { setDragIndex(null); setDragOverIndex(null) }}
               onContextMenu={(e) => handleContextMenu(e, page)}
               onClick={() => onPageClick(page)}
-              className={`relative cursor-pointer rounded border transition-all ${
+              onMouseEnter={() => setHoveredPage(page)}
+              onMouseLeave={() => setHoveredPage(null)}
+              className={`relative cursor-pointer rounded-lg overflow-hidden transition-all group ${
                 isActive
-                  ? 'border-primary-500 ring-2 ring-primary-200'
-                  : 'border-gray-200 hover:border-gray-400'
-              } ${isDragOver ? 'border-t-4 border-t-primary-500' : ''} ${
-                dragIndex === page ? 'opacity-40' : ''
+                  ? 'ring-2 ring-blue-500 shadow-md'
+                  : 'ring-1 ring-gray-200 hover:ring-gray-300 hover:shadow-sm'
+              } ${isDragOver ? 'ring-2 ring-blue-400 ring-offset-2' : ''} ${
+                dragIndex === page ? 'opacity-40 scale-95' : ''
               }`}
             >
-              <div className="aspect-[3/4] bg-gray-50 flex items-center justify-center overflow-hidden rounded-t">
+              <div className="aspect-[3/4] bg-white flex items-center justify-center overflow-hidden">
                 {thumbUrl ? (
-                  <img src={thumbUrl} alt={`Page ${page}`} className="w-full h-full object-contain" />
+                  <img
+                    src={thumbUrl}
+                    alt={`Page ${page}`}
+                    className="w-full h-full object-contain"
+                    draggable={false}
+                  />
                 ) : (
-                  <span className="text-gray-400 text-xs">Page {page}</span>
+                  <div className="flex flex-col items-center gap-1">
+                    <div className="w-8 h-10 rounded border border-gray-200 bg-gray-50" />
+                    <span className="text-[10px] text-gray-400">Loading...</span>
+                  </div>
                 )}
               </div>
-              <div className="text-center py-0.5 text-[10px] text-gray-500 bg-gray-50 rounded-b">
+
+              <div className={`absolute bottom-0 inset-x-0 flex items-center justify-center py-1 text-[10px] font-medium ${
+                isActive ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-500'
+              }`}>
                 {page}
               </div>
+
+              {isHovered && !dragIndex && (
+                <div className="absolute top-1 right-1 flex gap-0.5">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onRotate(page, 90) }}
+                    className="p-1 bg-white/90 rounded shadow-sm hover:bg-gray-100 text-gray-600 transition-colors"
+                    title="Rotate"
+                  >
+                    <RotateCw size={11} />
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onDuplicate(page) }}
+                    className="p-1 bg-white/90 rounded shadow-sm hover:bg-gray-100 text-gray-600 transition-colors"
+                    title="Duplicate"
+                  >
+                    <Copy size={11} />
+                  </button>
+                  {pageCount > 1 && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onDelete(page) }}
+                      className="p-1 bg-white/90 rounded shadow-sm hover:bg-red-50 text-gray-600 hover:text-red-600 transition-colors"
+                      title="Delete"
+                    >
+                      <Trash2 size={11} />
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           )
         })}
@@ -124,41 +169,41 @@ export default function PagePanel({
 
       {contextMenu && (
         <div
-          className="fixed bg-white border rounded shadow-lg py-1 z-50 min-w-[140px]"
+          className="fixed bg-white border border-gray-200 rounded-lg shadow-xl py-1 z-50 min-w-[160px]"
           style={{ left: contextMenu.x, top: contextMenu.y }}
           onClick={(e) => e.stopPropagation()}
         >
           <button
             onClick={() => { onRotate(contextMenu.page, 90); closeContextMenu() }}
-            className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-100"
+            className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 flex items-center gap-2 text-gray-700"
           >
-            Rotate clockwise
+            <RotateCw size={12} /> Rotate clockwise
           </button>
           <button
             onClick={() => { onRotate(contextMenu.page, 270); closeContextMenu() }}
-            className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-100"
+            className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 flex items-center gap-2 text-gray-700"
           >
-            Rotate counter-clockwise
+            <RotateCw size={12} className="scale-x-[-1]" /> Rotate counter-clockwise
           </button>
           <button
             onClick={() => { onDuplicate(contextMenu.page); closeContextMenu() }}
-            className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-100"
+            className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 flex items-center gap-2 text-gray-700"
           >
-            Duplicate page
+            <Copy size={12} /> Duplicate page
           </button>
           <button
             onClick={() => { onInsertBlank(contextMenu.page); closeContextMenu() }}
-            className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-100"
+            className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 flex items-center gap-2 text-gray-700"
           >
-            Insert blank after
+            <Plus size={12} /> Insert blank after
           </button>
-          <hr className="my-1" />
+          <hr className="my-1 border-gray-100" />
           <button
             onClick={() => { onDelete(contextMenu.page); closeContextMenu() }}
-            className="w-full text-left px-3 py-1.5 text-xs text-red-600 hover:bg-red-50"
+            className="w-full text-left px-3 py-2 text-xs hover:bg-red-50 flex items-center gap-2 text-red-600"
             disabled={pageCount <= 1}
           >
-            Delete page
+            <Trash2 size={12} /> Delete page
           </button>
         </div>
       )}

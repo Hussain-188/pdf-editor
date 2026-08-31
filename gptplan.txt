@@ -1,0 +1,3157 @@
+Yes. The right way to build this is **not** “make a PDF editor with a few buttons.” You want to build a **complete PDF document-processing platform** combining:
+
+* Sejda's deep PDF editing/manipulation capabilities
+* iLovePDF's broad one-click tool ecosystem and workflow model
+* a serious document editor
+* OCR and document intelligence
+* forms/signatures/redaction
+* batch processing
+* cloud integrations
+* eventually AI-powered PDF operations
+
+Both products are much broader than just an editor. Sejda currently exposes 30+ tools including editing existing text, forms, merge/split variants, Bates numbering, repair, crop, OCR, metadata, bookmarks, N-up, grayscale, extract images, etc. ([Sejda.com - We help with your PDF tasks][1]) iLovePDF organizes its product into workflows for organizing, optimizing, converting, editing, security and PDF intelligence, including OCR, compare, redact, PDF/A, AI summarization, translation and PDF-to-Markdown. ([iLovePDF - Online tools for PDF][2])
+
+Below is the blueprint I would give Claude.
+
+---
+
+# 1. The product you are actually building
+
+Think of it as:
+
+> **Canva/Figma-like editor + Acrobat-like PDF engine + Sejda's PDF utilities + iLovePDF's conversion/workflow platform + AI document layer.**
+
+The application should have **three major layers**.
+
+### Layer A — PDF Editor
+
+A user opens one PDF and can visually manipulate it.
+
+Examples:
+
+* edit existing text
+* add text
+* change font
+* change font size
+* change color
+* bold/italic
+* move text
+* resize text boxes
+* images
+* shapes
+* lines
+* arrows
+* highlights
+* underline
+* strikethrough
+* comments
+* links
+* whiteout
+* redaction
+* signatures
+* checkmarks
+* stamps
+* freehand drawing
+* form fields
+* page thumbnails
+* page rotation
+* page deletion
+* page insertion
+* page duplication
+* drag/drop page ordering
+
+Sejda explicitly supports editing existing PDF text, adding text/images/shapes, links, forms, signatures, annotation, whiteout and find/replace. ([Sejda.com - We help with your PDF tasks][1])
+
+---
+
+# 2. Tool ecosystem
+
+The homepage should not just say "Upload PDF."
+
+It should look more like:
+
+```text
+PDF Tools
+
+Organize
+    Merge PDF
+    Split PDF
+    Organize PDF
+    Delete Pages
+    Extract Pages
+    Rotate PDF
+    Alternate & Mix
+    Visual Combine
+    Split by Bookmarks
+    Split by Text
+    Split by Size
+    Split in Half
+
+Edit
+    Edit PDF
+    Fill PDF
+    Sign PDF
+    Annotate PDF
+    Whiteout PDF
+    Redact PDF
+    Add Text
+    Add Images
+    Add Shapes
+    Edit Links
+    Find & Replace
+
+Optimize
+    Compress PDF
+    Repair PDF
+    Deskew PDF
+    OCR PDF
+    Flatten PDF
+    Grayscale PDF
+    PDF/A
+
+Convert
+    JPG → PDF
+    PNG → PDF
+    Word → PDF
+    Excel → PDF
+    PowerPoint → PDF
+    HTML → PDF
+
+    PDF → Word
+    PDF → Excel
+    PDF → PowerPoint
+    PDF → JPG
+    PDF → PNG
+    PDF → Text
+    PDF → PDF/A
+
+Page Tools
+    Crop PDF
+    Resize PDF
+    Page Numbers
+    Header & Footer
+    Watermark
+    Bates Numbering
+    N-up
+    Bookmarks
+
+Security
+    Protect PDF
+    Unlock PDF
+    Sign PDF
+    Redact PDF
+    Remove Metadata
+    Flatten
+
+Forms
+    Create Form
+    Fill Form
+    Edit Form Fields
+    Export Form Data
+    Import Form Data
+
+Analyze
+    Compare PDFs
+    Extract Text
+    Extract Images
+    Extract Tables
+    OCR
+
+AI
+    Summarize PDF
+    Ask PDF
+    Translate PDF
+    Extract Data
+    PDF → Markdown
+    Generate quiz/questions
+    Find key clauses
+    Analyze contracts
+```
+
+This is close to the combined territory these platforms currently cover. ([iLovePDF - Online tools for PDF][3])
+
+---
+
+# 3. The most important thing: understand how PDF editing actually works
+
+This is where I would make your project considerably better than a simple clone.
+
+A PDF is **not a Word document**.
+
+A page is effectively a collection of positioned graphical/text objects.
+
+Conceptually:
+
+```text
+PDF
+│
+├── Page 1
+│   ├── Text object
+│   ├── Text object
+│   ├── Image
+│   ├── Vector drawing
+│   ├── Annotation
+│   └── Form field
+│
+├── Page 2
+│   ├── Text objects
+│   ├── Image
+│   └── Annotation
+│
+└── ...
+```
+
+So your editor needs two distinct concepts.
+
+### Rendering model
+
+```text
+PDF
+ ↓
+PDF parser
+ ↓
+Page model
+ ↓
+Text/image/vector extraction
+ ↓
+Rendering engine
+ ↓
+Canvas/WebGL/browser
+```
+
+And separately:
+
+```text
+User action
+ ↓
+Editor object model
+ ↓
+Operation / command
+ ↓
+PDF mutation engine
+ ↓
+New PDF
+```
+
+Do **not** design the application around screenshots of pages.
+
+---
+
+# 4. Critical distinction: overlay editing vs true existing-text editing
+
+This is extremely important.
+
+There are two ways to make an "Edit PDF" tool.
+
+### Fake/simple approach
+
+User clicks text:
+
+```text
+old PDF text remains
++
+white rectangle
++
+new text over it
+```
+
+This can visually work.
+
+But it causes problems:
+
+* searching still finds old text
+* copying text becomes wrong
+* accessibility is bad
+* document structure remains incorrect
+* fonts can mismatch
+* extraction remains wrong
+* overlapping objects become problematic
+
+### Real approach
+
+Detect the original PDF text object:
+
+```text
+TextObject
+    content = "Mohamed"
+    font = Helvetica
+    size = 12
+    position = x/y
+    color = ...
+```
+
+Then modify the PDF content stream.
+
+Your architecture should therefore support:
+
+```text
+Original PDF Object
+        ↓
+Parsed object representation
+        ↓
+Editable object model
+        ↓
+User modification
+        ↓
+PDF serialization
+```
+
+Sejda explicitly advertises clicking existing text and changing its font, size, family, style and color. ([Sejda.com - We help with your PDF tasks][1])
+
+That capability should be one of the core engineering goals.
+
+---
+
+# 5. PDF editor UI
+
+I would use an editor layout approximately like this:
+
+```text
+┌──────────────────────────────────────────────────────────────┐
+│ Logo     File   Edit   View   Tools        Undo Redo  Export │
+├───────────────┬───────────────────────────────┬──────────────┤
+│               │                               │              │
+│ PAGE          │                               │ PROPERTIES   │
+│ THUMBNAILS    │         PDF CANVAS           │              │
+│               │                               │              │
+│  Page 1       │       ┌──────────────┐        │ Font         │
+│  Page 2       │       │              │        │ Size         │
+│  Page 3       │       │     PDF      │        │ Color        │
+│  Page 4       │       │              │        │ Alignment    │
+│               │       │              │        │ Opacity      │
+│ + Add Page    │       └──────────────┘        │ Rotation     │
+│               │                               │              │
+├───────────────┴───────────────────────────────┴──────────────┤
+│ Text Image Shape Highlight Draw Signature Form Link ...      │
+└──────────────────────────────────────────────────────────────┘
+```
+
+And the bottom/tool bar should become contextual.
+
+For example:
+
+```text
+SELECT TEXT
+
+Font     Helvetica
+Size     12
+Bold     Italic
+Color    #
+Alignment
+Line height
+Character spacing
+```
+
+While image selection shows:
+
+```text
+Width
+Height
+Rotation
+Opacity
+Crop
+Replace
+Flip
+Position
+Lock
+```
+
+---
+
+# 6. Editor interaction model
+
+Every action should become an operation.
+
+For example:
+
+```text
+INSERT_TEXT
+DELETE_TEXT
+UPDATE_TEXT
+MOVE_OBJECT
+RESIZE_OBJECT
+ROTATE_OBJECT
+INSERT_IMAGE
+DELETE_IMAGE
+ADD_SHAPE
+ADD_HIGHLIGHT
+DELETE_PAGE
+MOVE_PAGE
+ROTATE_PAGE
+ADD_FORM_FIELD
+UPDATE_FORM_FIELD
+ADD_SIGNATURE
+```
+
+Then build an operation history:
+
+```text
+Operation 1
+Operation 2
+Operation 3
+Operation 4
+...
+```
+
+This gives you:
+
+```text
+Undo
+Redo
+History
+Autosave
+Crash recovery
+Collaboration later
+```
+
+Do **not** make undo by taking screenshots of the whole PDF.
+
+Use a command/operation architecture.
+
+---
+
+# 7. Internal document model
+
+Claude should design a document model roughly like:
+
+```typescript
+Document
+{
+    id
+    originalFile
+    pages[]
+    metadata
+    permissions
+    encryption
+    version
+}
+
+Page
+{
+    id
+    width
+    height
+    rotation
+
+    objects[]
+    annotations[]
+    formFields[]
+}
+
+TextObject
+{
+    id
+    pageId
+    content
+    x
+    y
+    width
+    height
+
+    fontFamily
+    fontSize
+    fontWeight
+    italic
+    color
+
+    characterSpacing
+    lineHeight
+    alignment
+
+    originalPdfObjectId
+}
+
+ImageObject
+{
+    id
+    pageId
+    source
+    x
+    y
+    width
+    height
+    rotation
+    opacity
+}
+
+ShapeObject
+{
+    type
+    x
+    y
+    width
+    height
+    fill
+    stroke
+    strokeWidth
+}
+
+Annotation
+{
+    type
+    rect
+    author
+    content
+}
+
+FormField
+{
+    type
+    name
+    value
+    required
+    options
+}
+```
+
+The actual implementation can be different. The important thing is to force Claude to design this model before writing features.
+
+---
+
+# 8. Rendering architecture
+
+A strong architecture would look like:
+
+```text
+                 ┌────────────────────┐
+                 │     Web Client     │
+                 │                    │
+                 │ React / Next.js    │
+                 │                    │
+                 │ PDF Viewer         │
+                 │ Editor             │
+                 │ Page Manager       │
+                 └─────────┬──────────┘
+                           │
+                           ▼
+                 ┌────────────────────┐
+                 │   Editor Engine    │
+                 │                    │
+                 │ Selection          │
+                 │ Coordinates        │
+                 │ Commands           │
+                 │ Undo/Redo          │
+                 │ Object Model       │
+                 └─────────┬──────────┘
+                           │
+                           ▼
+                ┌─────────────────────┐
+                │   PDF Processing    │
+                │       Engine        │
+                ├─────────────────────┤
+                │ Parse               │
+                │ Render              │
+                │ Modify              │
+                │ Merge               │
+                │ Split               │
+                │ Compress            │
+                │ OCR                 │
+                │ Convert             │
+                │ Sign                │
+                │ Encrypt             │
+                └─────────┬───────────┘
+                          │
+             ┌────────────┼────────────┐
+             ▼            ▼            ▼
+          Workers       Storage       OCR/AI
+```
+
+---
+
+# 9. Backend should be job based
+
+Do not make every PDF operation a synchronous HTTP request.
+
+For example:
+
+```text
+POST /jobs
+
+{
+   "operation": "compress",
+   "fileId": "..."
+}
+```
+
+returns:
+
+```json
+{
+  "jobId": "job_123",
+  "status": "queued"
+}
+```
+
+Worker:
+
+```text
+Queue
+ ↓
+PDF Worker
+ ↓
+Processing
+ ↓
+Output
+ ↓
+Object Storage
+ ↓
+Download URL
+```
+
+For small operations you can process synchronously.
+
+For large documents:
+
+```text
+Upload
+ ↓
+Create processing job
+ ↓
+Queue
+ ↓
+Worker
+ ↓
+Progress
+ ↓
+Completed
+```
+
+---
+
+# 10. Processing architecture
+
+Separate your PDF capabilities.
+
+```text
+pdf-core
+├── parser
+├── renderer
+├── writer
+├── annotations
+├── forms
+└── metadata
+
+pdf-operations
+├── merge
+├── split
+├── rotate
+├── crop
+├── resize
+├── delete-pages
+├── reorder
+├── watermark
+├── headers-footers
+├── page-numbers
+├── bates
+├── grayscale
+└── flatten
+
+pdf-editing
+├── text-edit
+├── image-edit
+├── shape
+├── annotation
+├── link
+├── whiteout
+└── redact
+
+pdf-security
+├── encrypt
+├── decrypt
+├── password
+├── permissions
+├── signatures
+└── metadata
+
+pdf-conversion
+├── pdf-word
+├── pdf-excel
+├── pdf-ppt
+├── pdf-image
+├── image-pdf
+├── word-pdf
+├── html-pdf
+└── pdf-a
+
+pdf-intelligence
+├── OCR
+├── extraction
+├── classification
+├── summarization
+├── translation
+└── structured-data
+```
+
+This is much better than putting everything inside one giant service.
+
+---
+
+# 11. OCR
+
+OCR needs its own pipeline.
+
+```text
+PDF
+ ↓
+Determine whether page is text-based
+        │
+        ├── yes → native text extraction
+        │
+        └── no
+             ↓
+         render page
+             ↓
+            OCR
+             ↓
+       bounding boxes
+             ↓
+     confidence scoring
+             ↓
+      searchable layer
+             ↓
+      reconstructed PDF
+```
+
+For scanned PDFs, OCR should generate:
+
+```text
+text
+bounding box
+confidence
+language
+page number
+```
+
+Then your editor can work with those coordinates.
+
+---
+
+# 12. Forms
+
+Treat forms as a first-class system.
+
+Support:
+
+```text
+Text field
+Multiline text
+Checkbox
+Radio button
+Dropdown
+List
+Signature
+Date
+Button
+```
+
+And:
+
+```text
+Create field
+Move field
+Resize field
+Rename field
+Required/optional
+Default value
+Options
+Font
+Color
+Alignment
+Export values
+Import values
+Flatten
+```
+
+Sejda's editor supports creating fillable fields such as text, multiline text, dropdowns, checkbox and radio choices. ([Sejda.com - We help with your PDF tasks][1])
+
+---
+
+# 13. Digital signatures
+
+Don't confuse:
+
+```text
+visual signature
+```
+
+with:
+
+```text
+cryptographic digital signature
+```
+
+Support both eventually.
+
+### Visual signature
+
+```text
+Draw
+Type
+Upload image
+```
+
+### Digital signature
+
+```text
+Certificate
+Private key
+Signature algorithm
+Certificate chain
+PDF signature field
+Validation
+```
+
+Have Claude keep these as two separate systems.
+
+---
+
+# 14. Redaction
+
+This deserves special engineering attention.
+
+A white rectangle is **not redaction**.
+
+Proper redaction:
+
+```text
+Original content
+       ↓
+identify region
+       ↓
+remove text/image/vector data
+       ↓
+remove underlying content
+       ↓
+apply redaction appearance
+       ↓
+sanitize output
+```
+
+Otherwise someone can simply copy the supposedly hidden text.
+
+iLovePDF now explicitly provides permanent redaction, and its comparison/security tooling is part of its current feature set. ([iLovePDF - Online tools for PDF][2])
+
+---
+
+# 15. PDF security
+
+Support:
+
+```text
+Open password
+Owner password
+Permissions
+
+Allow printing
+Allow copying
+Allow editing
+Allow comments
+Allow form filling
+
+Encryption
+Decryption
+Unlock
+Flatten
+Metadata removal
+```
+
+---
+
+# 16. Page management
+
+The page manager should behave like a mini document-management canvas.
+
+Users should be able to:
+
+```text
+Drag page
+Delete page
+Duplicate page
+Rotate page
+Extract page
+Insert page
+Replace page
+Move page between documents
+Select multiple pages
+Select page ranges
+```
+
+And thumbnail actions:
+
+```text
+1 2 3 4 5 6
+↓ ↓ ↓ ↓ ↓ ↓
+drag / delete / rotate / duplicate
+```
+
+For multiple PDFs:
+
+```text
+PDF A
+ ├ Page 1
+ ├ Page 2
+ └ Page 3
+
+PDF B
+ ├ Page 1
+ ├ Page 2
+ └ Page 3
+```
+
+Allow:
+
+```text
+A1 A2 A3 B1 B2 B3
+```
+
+or:
+
+```text
+A1 B1 A2 B2 A3 B3
+```
+
+Sejda specifically exposes alternate/mix and multiple specialized split modes. ([Sejda.com - We help with your PDF tasks][1])
+
+---
+
+# 17. Conversion engine
+
+The conversion layer will probably be one of your hardest systems.
+
+```text
+PDF → DOCX
+PDF → XLSX
+PDF → PPTX
+PDF → JPG
+PDF → PNG
+PDF → TXT
+PDF → Markdown
+
+DOCX → PDF
+XLSX → PDF
+PPTX → PDF
+HTML → PDF
+JPG → PDF
+PNG → PDF
+```
+
+Do not write one magical "converter."
+
+Each conversion has a specialized pipeline.
+
+---
+
+# 18. AI layer
+
+This is where you can go beyond both products.
+
+Create:
+
+```text
+Ask this PDF
+```
+
+Example:
+
+> What is the termination clause?
+
+Then:
+
+```text
+PDF
+ ↓
+OCR / text extraction
+ ↓
+structure detection
+ ↓
+chunking
+ ↓
+embeddings
+ ↓
+retrieval
+ ↓
+LLM
+ ↓
+answer + page citations
+```
+
+Example answer:
+
+```text
+The termination clause allows either party
+to terminate with 30 days written notice.
+
+Source:
+Page 17
+```
+
+Other AI functions:
+
+```text
+Summarize
+Translate
+Ask questions
+Extract invoice fields
+Extract tables
+Extract names/dates
+Extract contract clauses
+Find duplicates
+Find sensitive data
+Detect missing signatures
+Explain document
+Generate form fields
+```
+
+iLovePDF's current product already has a "PDF Intelligence" category containing AI summarization, translation and PDF-to-Markdown, so this is a natural extension of the combined product. ([iLovePDF - Online tools for PDF][2])
+
+---
+
+# 19. Batch mode
+
+This is essential.
+
+User should be able to upload:
+
+```text
+50 PDFs
+```
+
+and say:
+
+```text
+Compress all
+```
+
+or:
+
+```text
+Convert all to JPG
+```
+
+or:
+
+```text
+Watermark all
+```
+
+The backend:
+
+```text
+Batch Job
+   │
+   ├── File 1
+   ├── File 2
+   ├── File 3
+   ├── ...
+   └── File 50
+```
+
+with progress:
+
+```text
+32 / 50 processed
+```
+
+and then:
+
+```text
+Download ZIP
+```
+
+iLovePDF explicitly supports batch-oriented workflows and promotes increased batch limits in its paid offering. ([iLovePDF - Online tools for PDF][4])
+
+---
+
+# 20. Cloud integrations
+
+Eventually:
+
+```text
+Upload
+├── Local computer
+├── Google Drive
+├── Dropbox
+├── OneDrive
+└── URL
+```
+
+Output:
+
+```text
+Download
+├── Computer
+├── Google Drive
+├── Dropbox
+└── Share
+```
+
+Both Sejda and iLovePDF currently support cloud-based file selection/storage workflows, including Google Drive and Dropbox. ([iLovePDF - Online tools for PDF][5])
+
+---
+
+# 21. File lifecycle
+
+Security needs to be built into the architecture.
+
+Recommended lifecycle:
+
+```text
+Upload
+ ↓
+Virus scan
+ ↓
+Object storage
+ ↓
+Processing
+ ↓
+Result storage
+ ↓
+Download
+ ↓
+Expiration
+ ↓
+Permanent deletion
+```
+
+Every object should have:
+
+```text
+owner
+createdAt
+expiresAt
+encryption
+processingStatus
+accessPolicy
+```
+
+Do not keep uploaded PDFs forever by default.
+
+Sejda states that online files are securely uploaded and permanently deleted after processing, while its desktop application keeps processing local. ([Sejda.com - We help with your PDF tasks][6])
+
+---
+
+# 22. Desktop / offline version
+
+Eventually you can have:
+
+```text
+Web
+Desktop
+Mobile
+```
+
+The desktop application can reuse much of the processing engine.
+
+Sejda and iLovePDF both currently offer desktop/offline workflows, which is a strong model for privacy-sensitive PDF processing. ([Sejda.com - We help with your PDF tasks][7])
+
+---
+
+# 23. Suggested technical architecture
+
+I would tell Claude to **evaluate technologies rather than blindly pick them**, but a strong starting point is:
+
+### Frontend
+
+```text
+Next.js
+React
+TypeScript
+Tailwind
+Zustand
+React Query
+```
+
+### PDF rendering
+
+Evaluate:
+
+```text
+PDF.js
+MuPDF
+PDFium
+```
+
+### PDF manipulation
+
+Evaluate:
+
+```text
+qpdf
+MuPDF
+PDFium
+Apache PDFBox
+iText
+pdf-lib
+```
+
+with licensing carefully reviewed before commercial use.
+
+### OCR
+
+Evaluate:
+
+```text
+Tesseract
+PaddleOCR
+commercial OCR APIs
+```
+
+### Backend
+
+A strong architecture could be:
+
+```text
+Node.js / TypeScript
++
+Python workers
+```
+
+or:
+
+```text
+Java/Spring Boot
++
+Python workers
+```
+
+depending on the PDF libraries selected.
+
+### Infrastructure
+
+```text
+PostgreSQL
+Redis
+S3-compatible object storage
+Queue
+Worker cluster
+Docker
+Kubernetes later
+```
+
+---
+
+# 24. API design
+
+For example:
+
+```http
+POST /api/files/upload
+
+POST /api/jobs/merge
+POST /api/jobs/split
+POST /api/jobs/compress
+POST /api/jobs/ocr
+POST /api/jobs/convert
+POST /api/jobs/watermark
+
+GET /api/jobs/:id
+
+GET /api/documents/:id
+
+POST /api/documents/:id/operations
+POST /api/documents/:id/save
+
+GET /api/documents/:id/download
+```
+
+For editor operations:
+
+```json
+{
+  "type": "UPDATE_TEXT",
+  "pageId": "p1",
+  "objectId": "text_123",
+  "changes": {
+    "text": "Updated text",
+    "fontSize": 14
+  }
+}
+```
+
+---
+
+# 25. Authentication
+
+Support:
+
+```text
+Guest
+Free account
+Pro
+Business
+Enterprise
+```
+
+Guest:
+
+```text
+limited operations
+```
+
+Free:
+
+```text
+more limits
+history
+cloud storage
+```
+
+Pro:
+
+```text
+larger files
+batch
+OCR
+AI
+advanced tools
+no ads
+```
+
+Business:
+
+```text
+teams
+shared workspaces
+permissions
+billing
+usage
+audit logs
+```
+
+Enterprise:
+
+```text
+SSO
+SCIM
+audit
+retention policies
+private processing
+API
+SLA
+```
+
+---
+
+# 26. Usage/limits engine
+
+Do **not** hardcode limits throughout the code.
+
+Build:
+
+```text
+Plan
+  ↓
+Capabilities
+  ↓
+Quota
+  ↓
+Policy Engine
+```
+
+Example:
+
+```json
+{
+  "plan": "free",
+  "maxFileSize": 50000000,
+  "maxPages": 100,
+  "dailyJobs": 10,
+  "ocrPages": 10,
+  "batchSize": 5
+}
+```
+
+Then changing pricing doesn't require rewriting PDF code.
+
+---
+
+# 27. Job state machine
+
+Claude should implement something like:
+
+```text
+CREATED
+   ↓
+UPLOADING
+   ↓
+QUEUED
+   ↓
+PROCESSING
+   ↓
+VALIDATING
+   ↓
+COMPLETED
+```
+
+Failure:
+
+```text
+PROCESSING
+     ↓
+   FAILED
+```
+
+Retry:
+
+```text
+FAILED
+ ↓
+RETRYING
+ ↓
+PROCESSING
+```
+
+This becomes extremely important at scale.
+
+---
+
+# 28. Observability
+
+Every processing request needs:
+
+```text
+job id
+user id
+operation
+input size
+page count
+worker
+processing time
+memory
+CPU
+result size
+error
+retry count
+```
+
+Metrics:
+
+```text
+jobs/minute
+average processing time
+95th percentile
+99th percentile
+failure rate
+OCR failure rate
+conversion failure rate
+queue depth
+```
+
+---
+
+# 29. The build order
+
+Do **not** ask Claude to build everything at once.
+
+Build this progressively.
+
+## Phase 0 — Architecture
+
+No production features.
+
+Create:
+
+```text
+repo
+monorepo structure
+frontend
+backend
+worker
+database
+storage
+queue
+shared types
+CI/CD
+testing
+logging
+```
+
+---
+
+## Phase 1 — PDF viewing
+
+Build:
+
+```text
+upload
+PDF parser
+PDF rendering
+zoom
+pan
+page navigation
+thumbnail sidebar
+search
+download
+```
+
+This becomes the foundation.
+
+---
+
+## Phase 2 — Page management
+
+Build:
+
+```text
+merge
+split
+delete
+extract
+reorder
+rotate
+duplicate
+insert
+crop
+resize
+```
+
+---
+
+## Phase 3 — Basic editor
+
+Build:
+
+```text
+select
+text
+image
+shape
+line
+arrow
+highlight
+underline
+strikeout
+draw
+undo
+redo
+```
+
+---
+
+## Phase 4 — True text editing
+
+This should be treated as a separate major engineering milestone.
+
+Build:
+
+```text
+detect text objects
+map PDF coordinates → screen coordinates
+detect font
+font substitution
+modify text
+reflow handling
+font embedding
+serialization
+```
+
+Then test against thousands of PDFs.
+
+---
+
+# 30. Phase 5 — Forms
+
+```text
+detect AcroForms
+edit fields
+create fields
+fill fields
+checkbox
+radio
+dropdown
+signature field
+flatten
+export data
+```
+
+---
+
+# 31. Phase 6 — Security
+
+```text
+encrypt
+password
+permissions
+unlock
+metadata
+redaction
+digital signature
+```
+
+---
+
+# 32. Phase 7 — Conversion
+
+Start with:
+
+```text
+JPG → PDF
+PNG → PDF
+PDF → JPG
+PDF → PNG
+PDF → TXT
+Word → PDF
+```
+
+Then:
+
+```text
+PDF → Word
+PDF → Excel
+PDF → PowerPoint
+HTML → PDF
+PDF/A
+```
+
+---
+
+# 33. Phase 8 — OCR
+
+```text
+scan detection
+OCR
+searchable PDF
+OCR text overlay
+language detection
+deskew
+rotation
+confidence
+```
+
+---
+
+# 34. Phase 9 — Batch processing
+
+```text
+multi-upload
+job groups
+progress
+parallel workers
+ZIP
+failure recovery
+```
+
+---
+
+# 35. Phase 10 — AI
+
+```text
+extract text
+chunk
+embeddings
+RAG
+Ask PDF
+summarize
+translate
+structured extraction
+```
+
+---
+
+# 36. Phase 11 — Cloud
+
+```text
+Google Drive
+Dropbox
+OneDrive
+URL import
+cloud export
+share links
+```
+
+---
+
+# 37. Phase 12 — Pro platform
+
+```text
+authentication
+subscriptions
+Stripe
+quotas
+billing
+team accounts
+workspaces
+API keys
+usage analytics
+```
+
+---
+
+# 38. Phase 13 — desktop
+
+Reuse:
+
+```text
+PDF engine
+editor
+operation model
+```
+
+and package:
+
+```text
+Windows
+macOS
+Linux
+```
+
+with local processing.
+
+---
+
+# 39. Testing strategy
+
+This is another area where your project should differ from typical Claude-generated software.
+
+PDF processing has **huge numbers of weird edge cases**.
+
+Create a corpus containing:
+
+```text
+simple PDFs
+scanned PDFs
+multi-column PDFs
+rotated PDFs
+encrypted PDFs
+embedded fonts
+missing fonts
+Unicode
+Arabic
+Tamil
+Hindi
+Chinese
+large PDFs
+forms
+annotations
+images
+tables
+corrupted PDFs
+password-protected PDFs
+PDF/A
+PDFs with transparency
+PDFs generated by Word
+PDFs generated by browsers
+PDFs generated by scanners
+```
+
+For every operation:
+
+```text
+input PDF
+ ↓
+operation
+ ↓
+output PDF
+ ↓
+validate
+ ↓
+render
+ ↓
+compare
+```
+
+Use:
+
+```text
+unit tests
+integration tests
+visual regression
+golden PDF tests
+fuzz tests
+load tests
+security tests
+```
+
+---
+
+# 40. Very important: visual regression testing
+
+For editor operations:
+
+```text
+original.pdf
+       ↓
+operation
+       ↓
+output.pdf
+       ↓
+render PNG
+       ↓
+pixel comparison
+```
+
+This detects:
+
+```text
+shifted text
+wrong font
+missing images
+broken page size
+wrong rotation
+misplaced annotation
+```
+
+---
+
+# 41. Product workflow
+
+The UX should follow the simplicity of Sejda/iLovePDF rather than exposing the engineering complexity.
+
+Example:
+
+### Merge
+
+```text
+Merge PDF
+     ↓
+Choose files
+     ↓
+Thumbnail preview
+     ↓
+Drag reorder
+     ↓
+Merge
+     ↓
+Processing
+     ↓
+Download
+```
+
+### Compress
+
+```text
+Upload
+ ↓
+Choose compression
+ ├ Extreme
+ ├ Recommended
+ └ Less compression
+ ↓
+Compress
+ ↓
+Before: 18 MB
+After: 4.3 MB
+ ↓
+Download
+```
+
+iLovePDF uses this sort of upload → configure → process → download workflow extensively. ([iLovePDF - Online tools for PDF][5])
+
+### Edit
+
+```text
+Upload
+ ↓
+Open editor
+ ↓
+Edit
+ ↓
+Preview
+ ↓
+Apply
+ ↓
+Generate
+ ↓
+Download
+```
+
+Sejda's online editor similarly centers its workflow around upload → edit → apply changes → download. ([Sejda.com - We help with your PDF tasks][1])
+
+---
+
+# 42. Make one unified workspace
+
+This is something I'd add beyond simply copying them.
+
+A user could start with:
+
+```text
+invoice.pdf
+```
+
+Then perform:
+
+```text
+OCR
+ ↓
+Edit
+ ↓
+Sign
+ ↓
+Compress
+ ↓
+Protect
+ ↓
+Download
+```
+
+without leaving the workspace.
+
+So your application internally becomes:
+
+```text
+Document Workspace
+│
+├ Original
+├ Current version
+├ History
+├ Operations
+├ Assets
+├ Pages
+├ Metadata
+├ Permissions
+└ Exports
+```
+
+That is much more powerful than independent tools.
+
+---
+
+# 43. Tool composition
+
+Build every operation as a composable service.
+
+Example:
+
+```text
+PDF
+ ↓
+Remove Pages
+ ↓
+Crop
+ ↓
+Watermark
+ ↓
+Page Numbers
+ ↓
+Compress
+ ↓
+Protect
+ ↓
+Output
+```
+
+Internally:
+
+```typescript
+pipeline([
+    removePages(),
+    crop(),
+    watermark(),
+    pageNumbers(),
+    compress(),
+    protect()
+])
+```
+
+This eventually enables a killer feature:
+
+## Automations
+
+User creates:
+
+```text
+Whenever I upload an invoice:
+    OCR
+    extract invoice number
+    rename PDF
+    compress
+    watermark
+    archive
+```
+
+That's a much bigger product.
+
+---
+
+# 44. Project folder structure
+
+I'd ask Claude to consider something like:
+
+```text
+pdf-platform/
+│
+├ apps/
+│   ├ web/
+│   ├ api/
+│   └ desktop/
+│
+├ packages/
+│   ├ ui/
+│   ├ editor/
+│   ├ pdf-core/
+│   ├ pdf-operations/
+│   ├ pdf-renderer/
+│   ├ document-model/
+│   ├ operation-engine/
+│   ├ shared/
+│   └ types/
+│
+├ workers/
+│   ├ merge/
+│   ├ convert/
+│   ├ compress/
+│   ├ ocr/
+│   ├ render/
+│   └ ai/
+│
+├ infrastructure/
+│   ├ docker/
+│   ├ terraform/
+│   └ kubernetes/
+│
+├ tests/
+│   ├ unit/
+│   ├ integration/
+│   ├ visual/
+│   ├ fixtures/
+│   └ load/
+│
+└ docs/
+    ├ architecture/
+    ├ api/
+    ├ pdf-engine/
+    └ decisions/
+```
+
+---
+
+# 45. Now the Claude prompt
+
+This is the part I'd actually give Claude.
+
+Copy this **as the master project prompt**:
+
+```text
+You are the principal architect and engineering lead for a production-grade PDF document platform.
+
+We are building a web application that combines the breadth and workflow simplicity of Sejda and iLovePDF with a much more powerful PDF editor and document intelligence layer.
+
+IMPORTANT:
+Do NOT immediately start coding.
+
+Your first responsibility is to deeply analyze, architect, decompose, and plan the entire system.
+
+The final product should be capable of becoming a serious commercial PDF platform, not a toy PDF editor.
+
+==================================================
+PRODUCT VISION
+==================================================
+
+Build a complete PDF platform containing:
+
+1. PDF Viewer
+2. True PDF Editor
+3. Page Management
+4. Merge / Split / Organize
+5. PDF Conversion
+6. Compression
+7. OCR
+8. Forms
+9. Fill & Sign
+10. Annotations
+11. Redaction
+12. Security
+13. Metadata
+14. Watermarking
+15. Header/Footer
+16. Page numbers
+17. Bates numbering
+18. Bookmarks
+19. PDF comparison
+20. PDF repair
+21. Batch processing
+22. Cloud storage integrations
+23. AI document intelligence
+24. User accounts
+25. Teams/workspaces
+26. Billing/subscriptions
+27. API
+28. Desktop/offline capability eventually
+
+The architecture must support adding future PDF operations without rewriting the core system.
+
+==================================================
+REFERENCE PRODUCTS
+==================================================
+
+Use Sejda and iLovePDF as product/UX references.
+
+Analyze their publicly available tools, workflows, UX patterns, upload/process/download model, organization of tools, editor concepts, limitations, batch model, cloud integration patterns, and feature categories.
+
+Do NOT blindly copy their implementation or code.
+
+Extract their product patterns and design a superior architecture.
+
+==================================================
+CRITICAL PDF EDITING REQUIREMENT
+==================================================
+
+The editor must NOT be designed as a simple image annotation layer.
+
+We require TRUE existing-text editing whenever technically possible.
+
+When the user clicks existing PDF text, the system should attempt to identify:
+
+- text content
+- PDF text object
+- bounding box
+- font
+- font size
+- color
+- character spacing
+- line spacing
+- transformation matrix
+- page coordinate
+- original object/reference
+
+Then allow:
+
+- text modification
+- font changes
+- font size changes
+- style changes
+- color changes
+- movement
+- resizing where appropriate
+
+Avoid merely drawing white rectangles over original text except as an explicitly chosen fallback mode.
+
+The architecture must support both:
+
+A. True PDF object editing
+B. Overlay editing fallback for PDFs where direct editing is impossible
+
+Clearly define when each approach is used.
+
+==================================================
+EDITOR ENGINE
+==================================================
+
+Design a proper editor engine with:
+
+- document model
+- page model
+- object model
+- selection system
+- coordinate transformation system
+- snapping
+- multi-selection
+- alignment
+- resize
+- rotation
+- z-index
+- keyboard shortcuts
+- undo
+- redo
+- command history
+- autosave
+- recovery
+- operation serialization
+
+All editing actions should be represented as commands/operations.
+
+Examples:
+
+INSERT_TEXT
+UPDATE_TEXT
+DELETE_TEXT
+MOVE_OBJECT
+RESIZE_OBJECT
+ROTATE_OBJECT
+INSERT_IMAGE
+DELETE_IMAGE
+ADD_SHAPE
+ADD_ANNOTATION
+ADD_LINK
+ADD_SIGNATURE
+ADD_FORM_FIELD
+DELETE_PAGE
+MOVE_PAGE
+ROTATE_PAGE
+INSERT_PAGE
+
+Design this as an extensible command architecture.
+
+==================================================
+PDF VIEWER
+==================================================
+
+Support:
+
+- page rendering
+- thumbnails
+- zoom
+- fit width
+- fit page
+- pan
+- page navigation
+- search
+- text selection
+- page rotation
+- rendering cache
+- lazy loading
+- large-document virtualization
+
+The viewer must remain responsive for large documents.
+
+==================================================
+PAGE OPERATIONS
+==================================================
+
+Implement architecture for:
+
+- merge
+- split
+- extract
+- delete pages
+- reorder
+- duplicate
+- rotate
+- crop
+- resize
+- insert pages
+- replace pages
+- alternate/mix
+- split by ranges
+- split by bookmarks
+- split by text
+- split by size
+- split scans in half
+- visual combine/reorder
+
+==================================================
+EDITING TOOLS
+==================================================
+
+Support:
+
+- existing text editing
+- add text
+- images
+- shapes
+- lines
+- arrows
+- freehand drawing
+- highlight
+- underline
+- strikethrough
+- comments
+- links
+- whiteout
+- redaction
+- stamps
+- signatures
+- checkmarks
+
+==================================================
+FORMS
+==================================================
+
+Support:
+
+- detect existing AcroForms
+- edit fields
+- create fields
+- text field
+- multiline text
+- checkbox
+- radio button
+- dropdown
+- list
+- signature field
+- required fields
+- default values
+- styling
+- field names
+- field movement
+- field resizing
+- flatten forms
+- import/export form data
+
+==================================================
+SIGNATURES
+==================================================
+
+Separate:
+
+1. Visual signatures
+2. Cryptographic digital signatures
+
+Visual:
+
+- draw
+- type
+- upload image
+
+Digital:
+
+- certificates
+- private keys
+- PDF signing
+- signature validation
+- certificate chain
+- timestamping architecture
+
+Do not mix these concepts.
+
+==================================================
+REDACTION
+==================================================
+
+Redaction must securely remove underlying PDF content.
+
+Never treat a white rectangle as secure redaction.
+
+Design:
+
+- region selection
+- text-based redaction
+- visual redaction
+- underlying object deletion
+- content stream sanitization
+- metadata sanitization
+- post-redaction validation
+
+==================================================
+OCR
+==================================================
+
+Design OCR as a complete pipeline.
+
+Steps:
+
+1. Detect whether text layer exists
+2. Render scanned pages
+3. OCR
+4. Detect text
+5. Detect bounding boxes
+6. confidence scores
+7. languages
+8. reconstruct searchable text layer
+9. make PDF searchable
+10. expose OCR text to editor/search/AI
+
+Support rotated and skewed scans.
+
+==================================================
+CONVERSION
+==================================================
+
+Support architecture for:
+
+PDF → DOCX
+PDF → XLSX
+PDF → PPTX
+PDF → JPG
+PDF → PNG
+PDF → TXT
+PDF → Markdown
+PDF → PDF/A
+
+DOCX → PDF
+XLSX → PDF
+PPTX → PDF
+HTML → PDF
+JPG → PDF
+PNG → PDF
+
+Every converter should be independently testable.
+
+==================================================
+OPTIMIZATION
+==================================================
+
+Support:
+
+- compression
+- image downsampling
+- image recompression
+- font optimization
+- object cleanup
+- duplicate resource detection
+- grayscale
+- deskew
+- repair
+- flatten
+
+Provide quality presets.
+
+==================================================
+SECURITY
+==================================================
+
+Support:
+
+- open password
+- owner password
+- permissions
+- encryption
+- decryption
+- unlock
+- flatten
+- metadata removal
+- sanitization
+
+==================================================
+DOCUMENT STRUCTURE
+==================================================
+
+Support:
+
+- metadata editing
+- title
+- author
+- subject
+- keywords
+- creator
+- producer
+- bookmarks
+- table of contents
+- page labels
+
+==================================================
+PAGE TOOLS
+==================================================
+
+Support:
+
+- crop
+- resize
+- rotate
+- flip
+- grayscale
+- page numbers
+- headers
+- footers
+- watermark
+- Bates numbering
+- N-up
+
+==================================================
+COMPARISON
+==================================================
+
+Build PDF comparison capability.
+
+Support:
+
+- page-by-page comparison
+- visual difference
+- text difference
+- added content
+- removed content
+- changed text
+- side-by-side view
+- overlays
+- summary report
+
+==================================================
+BATCH PROCESSING
+==================================================
+
+The platform must support batch operations.
+
+Example:
+
+50 PDFs
+→ compress all
+→ OCR all
+→ watermark all
+→ convert all
+
+Design:
+
+- batch jobs
+- child jobs
+- progress
+- retry
+- failures
+- partial success
+- ZIP output
+
+==================================================
+JOB ARCHITECTURE
+==================================================
+
+Do not process large PDFs synchronously through the main request thread.
+
+Design:
+
+Client
+↓
+API
+↓
+Job
+↓
+Queue
+↓
+Worker
+↓
+Processing
+↓
+Validation
+↓
+Storage
+↓
+Download
+
+Define a job state machine:
+
+CREATED
+UPLOADING
+QUEUED
+PROCESSING
+VALIDATING
+COMPLETED
+FAILED
+RETRYING
+EXPIRED
+
+==================================================
+STORAGE
+==================================================
+
+Design secure file lifecycle.
+
+Upload
+↓
+validation
+↓
+virus scanning
+↓
+object storage
+↓
+processing
+↓
+result
+↓
+temporary storage
+↓
+expiration
+↓
+deletion
+
+Do not assume files should exist permanently.
+
+==================================================
+AI DOCUMENT INTELLIGENCE
+==================================================
+
+Design future-ready AI architecture for:
+
+- summarize PDF
+- ask PDF
+- translate PDF
+- PDF → Markdown
+- extract structured data
+- extract tables
+- identify entities
+- find clauses
+- find sensitive information
+- identify missing signatures
+- generate form fields
+- classify documents
+
+AI answers must be grounded in document content and provide page-level citations.
+
+Architecture:
+
+PDF
+↓
+parse/OCR
+↓
+text structure
+↓
+chunking
+↓
+retrieval
+↓
+LLM
+↓
+answer
+↓
+page references
+
+==================================================
+CLOUD
+==================================================
+
+Design integrations for:
+
+- Google Drive
+- Dropbox
+- OneDrive
+- URL imports
+- cloud exports
+
+==================================================
+AUTHENTICATION
+==================================================
+
+Support:
+
+- guest
+- email/password
+- OAuth
+- sessions
+- account management
+- device/session management
+
+==================================================
+PLANS
+==================================================
+
+Design:
+
+FREE
+PRO
+BUSINESS
+ENTERPRISE
+
+Use a centralized capability/quota system.
+
+Do not hardcode limits throughout application code.
+
+Plan model should control:
+
+- file size
+- page count
+- job count
+- OCR
+- AI
+- batch size
+- storage
+- retention
+- API
+- collaboration
+
+==================================================
+TEAM / WORKSPACE
+==================================================
+
+Future-ready architecture for:
+
+- workspaces
+- members
+- roles
+- permissions
+- shared documents
+- audit logs
+- billing
+- usage
+
+==================================================
+API
+==================================================
+
+Design public API capability for PDF operations.
+
+Potential endpoints:
+
+POST /files
+GET /files/:id
+POST /jobs
+GET /jobs/:id
+GET /jobs/:id/result
+
+Also define operation-specific APIs.
+
+==================================================
+FRONTEND
+==================================================
+
+Design a professional editor UX.
+
+Suggested layout:
+
+top:
+File / Edit / View / Tools
+Undo / Redo
+Save / Export
+
+left:
+page thumbnails
+
+center:
+PDF canvas
+
+right:
+properties inspector
+
+bottom:
+contextual tools
+
+The application must feel like a serious document editor, not a form page.
+
+==================================================
+PERFORMANCE
+==================================================
+
+Design for:
+
+- large PDFs
+- hundreds of pages
+- lazy rendering
+- thumbnail caching
+- worker processing
+- memory limits
+- concurrency
+- queue backpressure
+- resumable uploads
+- large-file streaming
+
+==================================================
+SECURITY
+==================================================
+
+Threat model:
+
+- malicious PDFs
+- decompression bombs
+- malformed PDFs
+- zip bombs
+- XSS through PDF metadata
+- SSRF
+- malicious embedded content
+- path traversal
+- unauthorized file access
+- expired file reuse
+- worker isolation
+
+PDF processing workers should be isolated from the main application.
+
+==================================================
+TESTING
+==================================================
+
+Create a serious PDF test corpus.
+
+Include:
+
+- text PDFs
+- scanned PDFs
+- encrypted PDFs
+- password protected PDFs
+- PDFs with forms
+- PDFs with annotations
+- PDFs with embedded fonts
+- Unicode PDFs
+- Arabic
+- Tamil
+- Hindi
+- Chinese
+- multi-column PDFs
+- rotated PDFs
+- corrupted PDFs
+- large PDFs
+- PDFs generated by Word
+- browser-generated PDFs
+- scanner PDFs
+
+Tests:
+
+- unit
+- integration
+- golden PDF
+- visual regression
+- fuzz
+- load
+- security
+- performance
+
+For visual operations:
+
+PDF
+↓
+operation
+↓
+render output
+↓
+visual comparison
+
+==================================================
+OBSERVABILITY
+==================================================
+
+Every processing job should record:
+
+- job ID
+- user ID
+- operation
+- input size
+- page count
+- processing time
+- worker
+- memory
+- CPU
+- output size
+- errors
+- retry count
+
+Metrics:
+
+- throughput
+- failure rate
+- average duration
+- p95
+- p99
+- queue depth
+- worker utilization
+
+==================================================
+TECHNOLOGY SELECTION
+==================================================
+
+Do NOT blindly select libraries.
+
+Evaluate appropriate technologies for:
+
+PDF parsing
+PDF rendering
+PDF modification
+PDF generation
+OCR
+Office conversion
+HTML → PDF
+image processing
+queue
+storage
+
+For every major PDF library evaluate:
+
+- capabilities
+- performance
+- rendering quality
+- editing support
+- forms
+- annotations
+- encryption
+- signatures
+- licensing
+- commercial restrictions
+- server suitability
+- browser suitability
+
+Create a technology decision record before implementation.
+
+==================================================
+MONOREPO
+==================================================
+
+Propose a clean structure such as:
+
+apps/
+  web/
+  api/
+  desktop/
+
+packages/
+  ui/
+  editor/
+  pdf-core/
+  pdf-renderer/
+  document-model/
+  operation-engine/
+  pdf-operations/
+  shared/
+  types/
+
+workers/
+  render/
+  convert/
+  ocr/
+  compress/
+  processing/
+  ai/
+
+tests/
+docs/
+infrastructure/
+
+Adjust the structure if a better architecture exists.
+
+==================================================
+MOST IMPORTANT PLANNING RULE
+==================================================
+
+Do not attempt to implement the entire project at once.
+
+Break the system into independently deliverable phases.
+
+Each phase must contain:
+
+1. objective
+2. dependencies
+3. architecture
+4. database changes
+5. API changes
+6. frontend changes
+7. backend changes
+8. worker changes
+9. tests
+10. security considerations
+11. performance considerations
+12. acceptance criteria
+13. risks
+14. rollback strategy
+
+==================================================
+PHASE ORDER
+==================================================
+
+At minimum evaluate this progression:
+
+Phase 0
+Architecture and technology research
+
+Phase 1
+Infrastructure + repository + CI/CD
+
+Phase 2
+PDF viewer
+
+Phase 3
+Page management
+
+Phase 4
+Basic editor
+
+Phase 5
+True existing-text editing
+
+Phase 6
+Forms
+
+Phase 7
+Signatures
+
+Phase 8
+Security + redaction
+
+Phase 9
+Conversion
+
+Phase 10
+Optimization + repair
+
+Phase 11
+OCR
+
+Phase 12
+Batch processing
+
+Phase 13
+Cloud integrations
+
+Phase 14
+PDF comparison
+
+Phase 15
+AI document intelligence
+
+Phase 16
+Authentication + billing
+
+Phase 17
+Teams/workspaces
+
+Phase 18
+Public API
+
+Phase 19
+Desktop/offline
+
+Phase 20
+Scale/performance hardening
+
+Reorder these if your technical dependency analysis indicates a better sequence.
+
+==================================================
+IMPORTANT: DO NOT IMPLEMENT YET
+==================================================
+
+Your first response must ONLY be the planning/architecture package.
+
+Provide:
+
+A. Product architecture
+B. Complete feature map
+C. System architecture
+D. PDF rendering architecture
+E. PDF editing architecture
+F. document model
+G. operation/command model
+H. backend architecture
+I. worker architecture
+J. storage architecture
+K. OCR architecture
+L. AI architecture
+M. security architecture
+N. database schema proposal
+O. API design
+P. frontend architecture
+Q. repository structure
+R. technology comparison
+S. phased implementation roadmap
+T. dependency graph
+U. risk register
+V. testing strategy
+W. performance strategy
+X. deployment strategy
+
+For every important architectural decision explain:
+
+- why
+- alternatives
+- tradeoffs
+- risks
+- scaling implications
+- licensing implications
+
+Then stop.
+
+Do not write implementation code until the architecture is approved.
+```
+
+---
+
+# 46. One thing I strongly recommend adding to that prompt
+
+Tell Claude to create a document called:
+
+```text
+ARCHITECTURE.md
+```
+
+and inside it maintain:
+
+```text
+Decision 001
+PDF Rendering Engine
+
+Decision 002
+PDF Modification Engine
+
+Decision 003
+Editor Coordinate System
+
+Decision 004
+Job Queue
+
+Decision 005
+Storage Architecture
+
+Decision 006
+OCR Engine
+
+Decision 007
+AI Architecture
+```
+
+This becomes your **Architecture Decision Record (ADR)** system.
+
+Otherwise, after 50,000 lines of Claude-generated code, you'll get contradictory implementations.
+
+---
+
+# 47. Do not let Claude do this
+
+Avoid the pattern:
+
+```text
+User:
+Build PDF editor
+
+Claude:
+I'll create components...
+
+src/
+components/
+PdfViewer.tsx
+Editor.tsx
+...
+```
+
+That's exactly how these projects become impossible to maintain.
+
+Instead:
+
+```text
+Requirements
+ ↓
+Architecture
+ ↓
+Technology decisions
+ ↓
+Domain model
+ ↓
+Interfaces
+ ↓
+Contracts
+ ↓
+Test strategy
+ ↓
+Phase 1
+ ↓
+Implementation
+ ↓
+Validation
+ ↓
+Phase 2
+```
+
+---
+
+# 48. Your real killer feature
+
+Don't merely make:
+
+> "Sejda + iLovePDF clone."
+
+Make:
+
+> **One PDF workspace where every operation can be chained without downloading/re-uploading the document.**
+
+For example:
+
+```text
+contract.pdf
+       │
+       ▼
+      OCR
+       │
+       ▼
+ Remove page 3
+       │
+       ▼
+ Edit clause
+       │
+       ▼
+ Add signature
+       │
+       ▼
+ Add page numbers
+       │
+       ▼
+ Compress
+       │
+       ▼
+ Encrypt
+       │
+       ▼
+ Download
+```
+
+That becomes your real product architecture.
+
+The current Sejda model is heavily tool-oriented, with dozens of specialized operations, while iLovePDF explicitly groups operations into workflow categories and supports cloud/mobile/desktop usage. ([Sejda.com - We help with your PDF tasks][8]) Your opportunity is to combine that breadth with a **persistent document workspace and composable operation pipeline** rather than making users repeatedly enter and leave isolated tools.
+
+[1]: https://www.sejda.com/pdf-editor?utm_source=chatgpt.com "Easy to use Online PDF editor"
+[2]: https://www.ilovepdf.com/?utm_source=chatgpt.com "iLovePDF | Online PDF tools for PDF lovers"
+[3]: https://www.ilovepdf.com/?lang=en&utm_source=chatgpt.com "iLovePDF | Online PDF tools for PDF lovers"
+[4]: https://www.ilovepdf.com/features?utm_source=chatgpt.com "iLovePDF features for manage PDF files with advanced PDF tools"
+[5]: https://www.ilovepdf.com/help/documentation?utm_source=chatgpt.com "All the help you need to enjoy our online tools for managing PDFs"
+[6]: https://www.sejda.com/?utm_source=chatgpt.com "Sejda helps with your PDF tasks"
+[7]: https://www.sejda.com/desktop?utm_source=chatgpt.com "Sejda PDF Desktop - Official Website"
+[8]: https://www.sejda.com/en/gdrive-open?utm_source=chatgpt.com "Select your PDF tool to continue"

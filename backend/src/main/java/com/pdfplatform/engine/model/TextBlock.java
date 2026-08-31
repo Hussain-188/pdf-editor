@@ -41,7 +41,18 @@ public class TextBlock {
 
     public String getFullText() {
         StringBuilder sb = new StringBuilder();
-        for (TextRun run : runs) {
+        for (int i = 0; i < runs.size(); i++) {
+            TextRun run = runs.get(i);
+            if (i > 0) {
+                TextRun prev = runs.get(i - 1);
+                float gap = run.getX() - (prev.getX() + prev.getWidth());
+                float avgCharWidth = prev.getText().isEmpty()
+                        ? prev.getFontSize() * 0.5f
+                        : prev.getWidth() / prev.getText().length();
+                if (gap > avgCharWidth * 0.3f) {
+                    sb.append(' ');
+                }
+            }
             sb.append(run.getText());
         }
         return sb.toString();

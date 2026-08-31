@@ -37,6 +37,10 @@ pgdata/
 redisdata/
 miniodata/
 
+# Local file storage
+backend/storage/
+test-storage/
+
 # Logs and temp
 *.log
 error.txt

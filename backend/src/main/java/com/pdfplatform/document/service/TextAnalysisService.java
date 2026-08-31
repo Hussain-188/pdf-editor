@@ -17,7 +17,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 
 @Service
 public class TextAnalysisService {
@@ -122,7 +121,7 @@ public class TextAnalysisService {
                 : new double[]{0, 0, 0};
 
         return new TextBlockDto(
-                UUID.randomUUID().toString(),
+                block.getId(),
                 block.getFullText(),
                 block.getX(),
                 block.getY(),

@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from 'react'
+import { Upload, FileText, Loader2, AlertCircle } from 'lucide-react'
 import api from '../lib/api'
 import { useAuthStore } from '../stores/authStore'
 import { useGuestStore } from '../stores/guestStore'
@@ -12,13 +13,15 @@ interface UploadedDoc {
 
 interface UploadDropzoneProps {
   onUploadComplete?: (doc: UploadedDoc) => void
+  compact?: boolean
 }
 
-export default function UploadDropzone({ onUploadComplete }: UploadDropzoneProps) {
+export default function UploadDropzone({ onUploadComplete, compact }: UploadDropzoneProps) {
   const [dragging, setDragging] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [progress, setProgress] = useState(0)
   const [error, setError] = useState('')
+  const [fileName, setFileName] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { isAuthenticated } = useAuthStore()
   const { initSession } = useGuestStore()
@@ -32,6 +35,7 @@ export default function UploadDropzone({ onUploadComplete }: UploadDropzoneProps
     setError('')
     setUploading(true)
     setProgress(0)
+    setFileName(file.name)
 
     try {
       const formData = new FormData()
@@ -51,10 +55,11 @@ export default function UploadDropzone({ onUploadComplete }: UploadDropzoneProps
 
       onUploadComplete?.(data)
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Upload failed')
+      setError(err.response?.data?.error || 'Upload failed. Please try again.')
     } finally {
       setUploading(false)
       setProgress(0)
+      setFileName('')
     }
   }, [isAuthenticated, initSession, onUploadComplete])
 
@@ -76,9 +81,15 @@ export default function UploadDropzone({ onUploadComplete }: UploadDropzoneProps
       onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
       onDragLeave={() => setDragging(false)}
       onDrop={handleDrop}
-      onClick={() => fileInputRef.current?.click()}
-      className={`border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-colors ${
-        dragging ? 'border-primary-500 bg-primary-50' : 'border-gray-300 hover:border-gray-400'
+      onClick={() => !uploading && fileInputRef.current?.click()}
+      className={`border-2 border-dashed rounded-2xl text-center transition-all duration-200 ${
+        compact ? 'p-6' : 'p-10'
+      } ${
+        uploading ? 'cursor-default' : 'cursor-pointer'
+      } ${
+        dragging
+          ? 'border-primary-400 bg-primary-50 scale-[1.01]'
+          : 'border-gray-300 hover:border-primary-400 hover:bg-gray-50'
       }`}
     >
       <input
@@ -91,32 +102,39 @@ export default function UploadDropzone({ onUploadComplete }: UploadDropzoneProps
 
       {uploading ? (
         <div className="space-y-3">
-          <p className="text-gray-700 font-medium">Uploading...</p>
-          <div className="w-full max-w-xs mx-auto bg-gray-200 rounded-full h-2">
+          <div className="flex items-center justify-center gap-2">
+            <Loader2 className="w-5 h-5 text-primary-600 animate-spin" />
+            <span className="text-sm font-medium text-gray-700">Uploading...</span>
+          </div>
+          <div className="flex items-center gap-3 max-w-xs mx-auto">
+            <FileText className="w-5 h-5 text-red-500 shrink-0" />
+            <span className="text-xs text-gray-500 truncate">{fileName}</span>
+          </div>
+          <div className="w-full max-w-xs mx-auto bg-gray-200 rounded-full h-1.5">
             <div
-              className="bg-primary-600 h-2 rounded-full transition-all"
+              className="bg-primary-600 h-1.5 rounded-full transition-all duration-300"
               style={{ width: `${progress}%` }}
             />
           </div>
-          <p className="text-sm text-gray-500">{progress}%</p>
+          <p className="text-xs text-gray-400">{progress}%</p>
         </div>
       ) : (
         <>
-          <div className="mb-3">
-            <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                d="M12 16v-8m0 0l-3 3m3-3l3 3M3 12a9 9 0 1118 0 9 9 0 01-18 0z" />
-            </svg>
-          </div>
-          <p className="text-gray-700 font-medium">Drop a PDF here or click to browse</p>
+          <Upload className={`mx-auto text-gray-400 mb-3 ${compact ? 'w-8 h-8' : 'w-10 h-10'}`} />
+          <p className="text-gray-700 font-medium">
+            {compact ? 'Drop PDF here or click to browse' : 'Drop your PDF here or click to browse'}
+          </p>
           <p className="text-gray-400 text-sm mt-1">
-            {isAuthenticated ? 'Up to 200MB' : 'Up to 50MB (guest limit)'}
+            {isAuthenticated ? 'PDF files up to 200 MB' : 'PDF files up to 50 MB (guest)'}
           </p>
         </>
       )}
 
       {error && (
-        <p className="mt-3 text-sm text-red-600">{error}</p>
+        <div className="mt-3 flex items-center justify-center gap-1.5 text-sm text-red-600">
+          <AlertCircle className="w-4 h-4" />
+          {error}
+        </div>
       )}
     </div>
   )
