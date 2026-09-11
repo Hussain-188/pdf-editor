@@ -458,4 +458,79 @@ class EngineRegressionTest {
             assertEquals(1.0f, runs.get(4).getColor()[0], 0.01, "Outer color restored after middle Q");
         }
     }
+
+    // --- Fix 11: Parser handles malformed operators gracefully ---
+
+    @Test
+    void parserHandlesMalformedContentGracefully() throws IOException {
+        try (PDDocument doc = new PDDocument()) {
+            PDPage page = new PDPage(PDRectangle.A4);
+            doc.addPage(page);
+
+            PDType1Font font = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
+            try (PDPageContentStream cs = new PDPageContentStream(doc, page)) {
+                cs.beginText();
+                cs.setFont(font, 12);
+                cs.newLineAtOffset(72, 700);
+                cs.showText("Survives");
+                cs.endText();
+            }
+
+            List<TextRun> runs = parser.parse(page);
+            assertFalse(runs.isEmpty(), "Should parse text even if other operators are odd");
+            assertEquals("Survives", runs.get(0).getText());
+        }
+    }
+
+    // --- Fix 12: CMYK color conversion ---
+
+    @Test
+    void cmykColorConvertedToRgb() throws IOException {
+        try (PDDocument doc = new PDDocument()) {
+            PDPage page = new PDPage(PDRectangle.A4);
+            doc.addPage(page);
+
+            PDType1Font font = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
+            try (PDPageContentStream cs = new PDPageContentStream(doc, page)) {
+                cs.setNonStrokingColor(0f, 0f, 0f, 1f);
+                cs.beginText();
+                cs.setFont(font, 12);
+                cs.newLineAtOffset(72, 700);
+                cs.showText("Black CMYK");
+                cs.endText();
+            }
+
+            List<TextRun> runs = parser.parse(page);
+            assertEquals(1, runs.size());
+            float[] color = runs.get(0).getColor();
+            assertEquals(0.0f, color[0], 0.01, "CMYK black R should be 0");
+            assertEquals(0.0f, color[1], 0.01, "CMYK black G should be 0");
+            assertEquals(0.0f, color[2], 0.01, "CMYK black B should be 0");
+        }
+    }
+
+    // --- Fix 13: TextBlock editability assessment handles missing font gracefully ---
+
+    @Test
+    void editabilityWithStandardFont() throws IOException {
+        try (PDDocument doc = new PDDocument()) {
+            PDPage page = new PDPage(PDRectangle.A4);
+            doc.addPage(page);
+
+            PDType1Font font = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
+            try (PDPageContentStream cs = new PDPageContentStream(doc, page)) {
+                cs.beginText();
+                cs.setFont(font, 12);
+                cs.newLineAtOffset(72, 700);
+                cs.showText("Standard font");
+                cs.endText();
+            }
+
+            List<TextRun> runs = parser.parse(page);
+            List<TextBlock> blocks = extractor.extract(runs, page, 1);
+            assertFalse(blocks.isEmpty());
+            assertTrue(blocks.get(0).getEditability().canEdit(),
+                    "Standard 14 font blocks should be editable");
+        }
+    }
 }

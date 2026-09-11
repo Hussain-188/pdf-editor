@@ -90,7 +90,11 @@ public class ContentStreamParser {
 
         for (Object token : tokens) {
             if (token instanceof Operator operator) {
-                processOperator(ctx, operator, operands, runs, operatorIndex);
+                try {
+                    processOperator(ctx, operator, operands, runs, operatorIndex);
+                } catch (Exception e) {
+                    // Skip malformed operators gracefully
+                }
                 operatorIndex++;
                 operands.clear();
             } else if (token instanceof COSBase cosBase) {
@@ -461,22 +465,40 @@ public class ContentStreamParser {
         if (ctx.currentFont instanceof org.apache.pdfbox.pdmodel.font.PDSimpleFont simpleFont) {
             for (byte b : bytes) {
                 int code = b & 0xFF;
-                String unicode = simpleFont.toUnicode(code);
-                sb.append(unicode != null ? unicode : String.valueOf((char) code));
+                try {
+                    String unicode = simpleFont.toUnicode(code);
+                    sb.append(unicode != null ? unicode : String.valueOf((char) code));
+                } catch (Exception e) {
+                    sb.append(String.valueOf((char) code));
+                }
             }
         } else if (ctx.currentFont instanceof org.apache.pdfbox.pdmodel.font.PDType0Font type0Font) {
-            int i = 0;
-            while (i < bytes.length) {
+            try {
+                java.io.InputStream is = new java.io.ByteArrayInputStream(bytes);
                 int code;
-                if (i + 1 < bytes.length) {
-                    code = ((bytes[i] & 0xFF) << 8) | (bytes[i + 1] & 0xFF);
-                    i += 2;
-                } else {
-                    code = bytes[i] & 0xFF;
-                    i++;
+                while (is.available() > 0) {
+                    code = type0Font.readCode(is);
+                    String unicode = type0Font.toUnicode(code);
+                    if (unicode != null) {
+                        sb.append(unicode);
+                    }
                 }
-                String unicode = type0Font.toUnicode(code);
-                if (unicode != null) sb.append(unicode);
+            } catch (Exception e) {
+                int i = 0;
+                while (i < bytes.length) {
+                    int code;
+                    if (i + 1 < bytes.length) {
+                        code = ((bytes[i] & 0xFF) << 8) | (bytes[i + 1] & 0xFF);
+                        i += 2;
+                    } else {
+                        code = bytes[i] & 0xFF;
+                        i++;
+                    }
+                    try {
+                        String unicode = type0Font.toUnicode(code);
+                        if (unicode != null) sb.append(unicode);
+                    } catch (Exception ignored) {}
+                }
             }
         } else {
             return cosString.getString();
