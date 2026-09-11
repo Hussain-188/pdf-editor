@@ -45,7 +45,7 @@ public class TextAnalysisService {
                 PDRectangle mediaBox = page.getMediaBox();
 
                 List<TextRun> runs = contentStreamParser.parse(page);
-                List<TextBlock> blocks = textBlockExtractor.extract(runs, page);
+                List<TextBlock> blocks = textBlockExtractor.extract(runs, page, pageNumber);
 
                 List<TextBlockDto> blockDtos = new ArrayList<>();
                 for (TextBlock block : blocks) {
@@ -72,7 +72,7 @@ public class TextAnalysisService {
                     PDRectangle mediaBox = page.getMediaBox();
 
                     List<TextRun> runs = contentStreamParser.parse(page);
-                    List<TextBlock> blocks = textBlockExtractor.extract(runs, page);
+                    List<TextBlock> blocks = textBlockExtractor.extract(runs, page, i + 1);
 
                     List<TextBlockDto> blockDtos = new ArrayList<>();
                     for (TextBlock block : blocks) {

@@ -19,12 +19,51 @@ import java.util.List;
 @Service
 public class ContentStreamParser {
 
+    private static class GraphicsState {
+        final Matrix ctm;
+        final PDFont currentFont;
+        final String currentFontResourceName;
+        final float currentFontSize;
+        final float[] currentColor;
+        final float wordSpacing;
+        final float charSpacing;
+        final float textLeading;
+        final float textRise;
+        final float horizontalScaling;
+
+        GraphicsState(ParseContext ctx) {
+            this.ctm = ctx.ctm.clone();
+            this.currentFont = ctx.currentFont;
+            this.currentFontResourceName = ctx.currentFontResourceName;
+            this.currentFontSize = ctx.currentFontSize;
+            this.currentColor = ctx.currentColor.clone();
+            this.wordSpacing = ctx.wordSpacing;
+            this.charSpacing = ctx.charSpacing;
+            this.textLeading = ctx.textLeading;
+            this.textRise = ctx.textRise;
+            this.horizontalScaling = ctx.horizontalScaling;
+        }
+
+        void restoreTo(ParseContext ctx) {
+            ctx.ctm = this.ctm;
+            ctx.currentFont = this.currentFont;
+            ctx.currentFontResourceName = this.currentFontResourceName;
+            ctx.currentFontSize = this.currentFontSize;
+            ctx.currentColor = this.currentColor;
+            ctx.wordSpacing = this.wordSpacing;
+            ctx.charSpacing = this.charSpacing;
+            ctx.textLeading = this.textLeading;
+            ctx.textRise = this.textRise;
+            ctx.horizontalScaling = this.horizontalScaling;
+        }
+    }
+
     private static class ParseContext {
         PDResources resources;
         Matrix textMatrix;
         Matrix textLineMatrix;
         Matrix ctm = new Matrix();
-        Deque<Matrix> graphicsStateStack = new ArrayDeque<>();
+        Deque<GraphicsState> graphicsStateStack = new ArrayDeque<>();
         PDFont currentFont;
         String currentFontResourceName;
         float currentFontSize = 12;
@@ -117,12 +156,12 @@ public class ContentStreamParser {
     }
 
     private void handleQ(ParseContext ctx) {
-        ctx.graphicsStateStack.push(ctx.ctm.clone());
+        ctx.graphicsStateStack.push(new GraphicsState(ctx));
     }
 
     private void handleQRestore(ParseContext ctx) {
         if (!ctx.graphicsStateStack.isEmpty()) {
-            ctx.ctm = ctx.graphicsStateStack.pop();
+            ctx.graphicsStateStack.pop().restoreTo(ctx);
         }
     }
 

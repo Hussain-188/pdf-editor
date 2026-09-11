@@ -1,6 +1,7 @@
 package com.pdfplatform.document.service;
 
 import com.pdfplatform.document.dto.EditRequest;
+import com.pdfplatform.document.dto.EditResult;
 import com.pdfplatform.document.entity.Document;
 import com.pdfplatform.document.repository.DocumentRepository;
 import com.pdfplatform.engine.editor.ContentStreamEditor;
@@ -44,7 +45,7 @@ public class DocumentEditService {
     }
 
     @Transactional
-    public Document applyEdit(Document doc, EditRequest request) throws IOException {
+    public EditResult applyEdit(Document doc, EditRequest request) throws IOException {
         String currentKey = doc.getStorageKeyCurrent() != null
                 ? doc.getStorageKeyCurrent()
                 : doc.getStorageKeyOriginal();
@@ -59,12 +60,19 @@ public class DocumentEditService {
             PDPage page = document.getPage(pageIndex);
 
             List<TextRun> runs = contentStreamParser.parse(page);
-            List<TextBlock> blocks = textBlockExtractor.extract(runs, page);
+            List<TextBlock> blocks = textBlockExtractor.extract(runs, page, request.pageNumber());
 
             TextBlock targetBlock = findTargetBlock(blocks, request);
             if (targetBlock == null) {
                 throw new IllegalArgumentException("Target text block not found on page " + request.pageNumber());
             }
+
+            // Capture original properties before the edit for undo support
+            Double originalFontSize = (double) targetBlock.getFontSize();
+            float[] origColor = targetBlock.getColor();
+            double[] originalColor = origColor != null
+                    ? new double[]{origColor[0], origColor[1], origColor[2]}
+                    : new double[]{0, 0, 0};
 
             switch (request.operation()) {
                 case "TEXT_REPLACE":
@@ -100,7 +108,8 @@ public class DocumentEditService {
 
             doc.setStorageKeyCurrent(editedKey);
             doc.setLastEditedAt(Instant.now());
-            return documentRepository.save(doc);
+            Document savedDoc = documentRepository.save(doc);
+            return new EditResult(savedDoc, originalFontSize, originalColor);
         }
     }
 

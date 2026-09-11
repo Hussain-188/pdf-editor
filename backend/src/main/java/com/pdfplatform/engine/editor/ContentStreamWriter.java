@@ -145,7 +145,7 @@ public class ContentStreamWriter {
             output.write(String.valueOf((int) value).getBytes(StandardCharsets.US_ASCII));
         } else {
             // Limit decimal places to avoid floating point noise
-            String formatted = String.format("%.4f", value).replaceAll("0+$", "").replaceAll("\\.$", "");
+            String formatted = String.format(java.util.Locale.US, "%.4f", value).replaceAll("0+$", "").replaceAll("\\.$", "");
             output.write(formatted.getBytes(StandardCharsets.US_ASCII));
         }
     }

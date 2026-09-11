@@ -20,7 +20,7 @@ import SignatureDialog from '../components/editor/SignatureDialog'
 export default function EditorPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { viewport, zoomIn, zoomOut, setScale } = useViewport(1.0)
+  const { viewport, zoomIn, zoomOut, setScale, fitToWidth } = useViewport(1.0)
   const analyzeDocument = useEditorStore((s) => s.analyzeDocument)
   const analysisLoading = useEditorStore((s) => s.analysisLoading)
   const selectedBlockId = useEditorStore((s) => s.selectedBlockId)
@@ -88,7 +88,8 @@ export default function EditorPage() {
       const canvas = document.createElement('canvas')
       canvas.width = vp.width
       canvas.height = vp.height
-      await page.render({ canvas, viewport: vp }).promise
+      const ctx = canvas.getContext('2d')!
+      await page.render({ canvas, canvasContext: ctx, viewport: vp }).promise
       newThumbnails.set(i, canvas.toDataURL())
     }
     setThumbnailUrls(newThumbnails)
@@ -266,6 +267,14 @@ export default function EditorPage() {
         e.preventDefault()
         setShowFindReplace(true)
       }
+      if ((e.ctrlKey || e.metaKey) && (e.key === '=' || e.key === '+')) {
+        e.preventDefault()
+        zoomIn()
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === '-') {
+        e.preventDefault()
+        zoomOut()
+      }
       if (e.key === 'Escape') {
         setShowFindReplace(false)
         selectBlock(null)
@@ -273,7 +282,32 @@ export default function EditorPage() {
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [handleUndo, handleRedo, selectBlock])
+  }, [handleUndo, handleRedo, selectBlock, zoomIn, zoomOut])
+
+  useEffect(() => {
+    const container = scrollContainerRef.current
+    if (!container) return
+    const handleWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault()
+        if (e.deltaY < 0) zoomIn()
+        else zoomOut()
+      }
+    }
+    container.addEventListener('wheel', handleWheel, { passive: false })
+    return () => container.removeEventListener('wheel', handleWheel)
+  }, [zoomIn, zoomOut])
+
+  useEffect(() => {
+    if (pages.length === 0) return
+    const container = scrollContainerRef.current
+    if (!container) return
+    const pageWidth = pages[0].getViewport({ scale: 1 }).width
+    const containerWidth = container.clientWidth - 32 // account for padding
+    if (containerWidth > 0 && pageWidth > 0) {
+      fitToWidth(containerWidth, pageWidth)
+    }
+  }, [pages, fitToWidth])
 
   if (loading) {
     return (
@@ -362,7 +396,7 @@ export default function EditorPage() {
         >
           {pages.map((page, index) => (
             <PageRenderer
-              key={index}
+              key={page.pageNumber}
               page={page}
               scale={viewport.scale}
               pageNumber={index + 1}

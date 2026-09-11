@@ -7,6 +7,7 @@ import api from '../../lib/api'
 interface InlineTextEditorProps {
   block: TextBlockData
   pageNumber: number
+  pageWidth: number
   pageHeight: number
   scale: number
   documentId: string
@@ -15,14 +16,14 @@ interface InlineTextEditorProps {
 }
 
 export default function InlineTextEditor({
-  block, pageNumber, pageHeight, scale, documentId, onEditComplete, onError,
+  block, pageNumber, pageWidth, pageHeight, scale, documentId, onEditComplete, onError,
 }: InlineTextEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null)
   const [saving, setSaving] = useState(false)
   const savingRef = useRef(false)
   const originalTextRef = useRef(block.text)
   const hasBlurredRef = useRef(false)
-  const { pdfRectToScreen } = useCoordinateTransform(scale, pageHeight)
+  const { pdfRectToScreen } = useCoordinateTransform(scale, pageWidth, pageHeight)
 
   const rect = pdfRectToScreen({
     x: block.x,
@@ -78,7 +79,7 @@ export default function InlineTextEditor({
       savingRef.current = false
       setSaving(false)
     }
-  }, [block.id, documentId, pageNumber, onEditComplete])
+  }, [block.id, documentId, pageNumber, onEditComplete, onError])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {

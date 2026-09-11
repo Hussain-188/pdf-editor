@@ -5,6 +5,7 @@ import InlineTextEditor from './InlineTextEditor'
 
 interface TextBlockOverlayProps {
   pageNumber: number
+  pageWidth: number
   pageHeight: number
   scale: number
   documentId?: string
@@ -12,13 +13,13 @@ interface TextBlockOverlayProps {
   onError?: (message: string) => void
 }
 
-export default function TextBlockOverlay({ pageNumber, pageHeight, scale, documentId, onDocumentChanged, onError }: TextBlockOverlayProps) {
+export default function TextBlockOverlay({ pageNumber, pageWidth, pageHeight, scale, documentId, onDocumentChanged, onError }: TextBlockOverlayProps) {
   const analysis = useEditorStore((s) => s.getPageAnalysis(pageNumber))
   const selectedBlockId = useEditorStore((s) => s.selectedBlockId)
   const selectBlock = useEditorStore((s) => s.selectBlock)
   const analyzeDocument = useEditorStore((s) => s.analyzeDocument)
   const docId = useEditorStore((s) => s.documentId)
-  const { pdfRectToScreen } = useCoordinateTransform(scale, pageHeight)
+  const { pdfRectToScreen } = useCoordinateTransform(scale, pageWidth, pageHeight)
 
   const [editingBlockId, setEditingBlockId] = useState<string | null>(null)
 
@@ -54,6 +55,7 @@ export default function TextBlockOverlay({ pageNumber, pageHeight, scale, docume
               key={block.id}
               block={block}
               pageNumber={pageNumber}
+              pageWidth={pageWidth}
               pageHeight={pageHeight}
               scale={scale}
               documentId={effectiveDocId}

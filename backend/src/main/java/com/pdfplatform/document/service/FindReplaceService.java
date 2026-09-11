@@ -50,7 +50,7 @@ public class FindReplaceService {
             for (int i = 0; i < pdf.getNumberOfPages(); i++) {
                 PDPage page = pdf.getPage(i);
                 List<TextRun> runs = contentStreamParser.parse(page);
-                List<TextBlock> blocks = textBlockExtractor.extract(runs, page);
+                List<TextBlock> blocks = textBlockExtractor.extract(runs, page, i + 1);
 
                 for (TextBlock block : blocks) {
                     String blockText = block.getFullText();
@@ -84,7 +84,7 @@ public class FindReplaceService {
             for (int i = 0; i < pdf.getNumberOfPages(); i++) {
                 PDPage page = pdf.getPage(i);
                 List<TextRun> runs = contentStreamParser.parse(page);
-                List<TextBlock> blocks = textBlockExtractor.extract(runs, page);
+                List<TextBlock> blocks = textBlockExtractor.extract(runs, page, i + 1);
 
                 for (TextBlock block : blocks) {
                     String blockText = block.getFullText();
@@ -96,7 +96,7 @@ public class FindReplaceService {
                         if (caseSensitive) {
                             newText = blockText.replace(searchText, replaceText);
                         } else {
-                            newText = blockText.replaceAll("(?i)" + java.util.regex.Pattern.quote(searchText), replaceText);
+                            newText = blockText.replaceAll("(?i)" + java.util.regex.Pattern.quote(searchText), java.util.regex.Matcher.quoteReplacement(replaceText));
                         }
                         try {
                             boolean replaced = contentStreamEditor.replaceText(pdf, i, block, blockText, newText);

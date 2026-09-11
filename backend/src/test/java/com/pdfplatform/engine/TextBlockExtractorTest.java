@@ -38,7 +38,7 @@ class TextBlockExtractorTest {
             }
 
             List<TextRun> runs = parser.parse(page);
-            List<TextBlock> blocks = extractor.extract(runs, page);
+            List<TextBlock> blocks = extractor.extract(runs, page, 1);
 
             assertEquals(1, blocks.size());
             assertTrue(blocks.get(0).getFullText().contains("Hello World"));
@@ -65,7 +65,7 @@ class TextBlockExtractorTest {
             }
 
             List<TextRun> runs = parser.parse(page);
-            List<TextBlock> blocks = extractor.extract(runs, page);
+            List<TextBlock> blocks = extractor.extract(runs, page, 1);
 
             assertTrue(blocks.size() >= 2, "Different fonts should produce separate blocks");
         }
@@ -89,7 +89,7 @@ class TextBlockExtractorTest {
             }
 
             List<TextRun> runs = parser.parse(page);
-            List<TextBlock> blocks = extractor.extract(runs, page);
+            List<TextBlock> blocks = extractor.extract(runs, page, 1);
 
             assertTrue(blocks.size() >= 2, "Widely spaced lines should be separate blocks");
         }
@@ -111,7 +111,7 @@ class TextBlockExtractorTest {
             }
 
             List<TextRun> runs = parser.parse(page);
-            List<TextBlock> blocks = extractor.extract(runs, page);
+            List<TextBlock> blocks = extractor.extract(runs, page, 1);
 
             assertEquals(1, blocks.size());
             TextBlock block = blocks.get(0);
@@ -139,7 +139,7 @@ class TextBlockExtractorTest {
             }
 
             List<TextRun> runs = parser.parse(page);
-            List<TextBlock> blocks = extractor.extract(runs, page);
+            List<TextBlock> blocks = extractor.extract(runs, page, 1);
 
             for (TextBlock block : blocks) {
                 assertNotNull(block.getId());
@@ -167,7 +167,7 @@ class TextBlockExtractorTest {
             }
 
             List<TextRun> runs = parser.parse(page);
-            List<TextBlock> blocks = extractor.extract(runs, page);
+            List<TextBlock> blocks = extractor.extract(runs, page, 1);
 
             assertEquals(1, blocks.size());
             assertNotNull(blocks.get(0).getEditability());
@@ -178,7 +178,7 @@ class TextBlockExtractorTest {
 
     @Test
     void emptyRunsReturnEmptyBlocks() throws IOException {
-        List<TextBlock> blocks = extractor.extract(List.of(), null);
+        List<TextBlock> blocks = extractor.extract(List.of(), null, 1);
         assertTrue(blocks.isEmpty());
     }
 }

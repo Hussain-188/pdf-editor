@@ -2,6 +2,7 @@ package com.pdfplatform.document.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pdfplatform.document.dto.EditRequest;
+import com.pdfplatform.document.dto.EditResult;
 import com.pdfplatform.document.entity.Document;
 import com.pdfplatform.document.entity.DocumentOperation;
 import com.pdfplatform.document.repository.DocumentOperationRepository;
@@ -29,7 +30,7 @@ public class OperationService {
 
     @Transactional
     public Document executeAndRecord(Document doc, EditRequest request) throws IOException {
-        Document edited = documentEditService.applyEdit(doc, request);
+        EditResult editResult = documentEditService.applyEdit(doc, request);
 
         int nextSeq = operationRepository.findMaxSequenceNumber(doc.getId()) + 1;
 
@@ -48,12 +49,16 @@ public class OperationService {
         op.setInverseParameters(objectMapper.writeValueAsString(Map.of(
                 "oldText", nullSafe(request.newText()),
                 "newText", nullSafe(request.oldText()),
-                "fontSize", request.fontSize() != null ? request.fontSize() : 0,
-                "color", request.color() != null ? request.color() : new double[]{}
+                "fontSize", editResult.originalFontSize() != null ? editResult.originalFontSize() : 0,
+                "color", editResult.originalColor() != null ? editResult.originalColor() : new double[]{}
         )));
 
         operationRepository.save(op);
-        return edited;
+
+        // Invalidate any previously undone operations so stale redo entries cannot be replayed
+        operationRepository.deleteUndoneByDocumentId(doc.getId());
+
+        return editResult.document();
     }
 
     @Transactional
@@ -81,10 +86,10 @@ public class OperationService {
                 fontSize, color
         );
 
-        Document result = documentEditService.applyEdit(doc, undoRequest);
+        EditResult editResult = documentEditService.applyEdit(doc, undoRequest);
         lastOp.setUndone(true);
         operationRepository.save(lastOp);
-        return result;
+        return editResult.document();
     }
 
     @Transactional
@@ -112,10 +117,10 @@ public class OperationService {
                 redoFontSize, redoColor
         );
 
-        Document result = documentEditService.applyEdit(doc, redoRequest);
+        EditResult editResult = documentEditService.applyEdit(doc, redoRequest);
         nextOp.setUndone(false);
         operationRepository.save(nextOp);
-        return result;
+        return editResult.document();
     }
 
     public List<DocumentOperation> getHistory(java.util.UUID documentId) {

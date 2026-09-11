@@ -19,9 +19,16 @@ export default function PageRenderer({ page, scale, pageNumber, showOverlay = fa
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const textLayerRef = useRef<HTMLDivElement>(null)
   const renderTaskRef = useRef<any>(null)
+  const textContentRef = useRef<any>(null)
+  const prevPageRef = useRef<PDFPageProxy | null>(null)
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 })
 
   useEffect(() => {
+    if (prevPageRef.current !== page) {
+      textContentRef.current = null
+      prevPageRef.current = page
+    }
+
     const viewport = page.getViewport({ scale })
     setDimensions({ width: viewport.width, height: viewport.height })
 
@@ -43,7 +50,7 @@ export default function PageRenderer({ page, scale, pageNumber, showOverlay = fa
       renderTaskRef.current.cancel()
     }
 
-    const renderTask = page.render({ canvas, viewport })
+    const renderTask = page.render({ canvas, canvasContext: context, viewport })
     renderTaskRef.current = renderTask
 
     renderTask.promise
@@ -67,10 +74,12 @@ export default function PageRenderer({ page, scale, pageNumber, showOverlay = fa
 
     try {
       const { TextLayer } = await import('pdfjs-dist')
-      const textContent = await pdfPage.getTextContent()
+      if (!textContentRef.current) {
+        textContentRef.current = await pdfPage.getTextContent()
+      }
       const textLayer = new TextLayer({
         container,
-        textContentSource: textContent,
+        textContentSource: textContentRef.current,
         viewport,
       })
       await textLayer.render()
@@ -96,6 +105,7 @@ export default function PageRenderer({ page, scale, pageNumber, showOverlay = fa
       {showOverlay && (
         <TextBlockOverlay
           pageNumber={pageNumber}
+          pageWidth={page.getViewport({ scale: 1 }).width}
           pageHeight={page.getViewport({ scale: 1 }).height}
           scale={scale}
           documentId={documentId}
@@ -113,6 +123,7 @@ export default function PageRenderer({ page, scale, pageNumber, showOverlay = fa
       )}
       <AnnotationLayer
         pageNumber={pageNumber}
+        pageWidth={page.getViewport({ scale: 1 }).width}
         pageHeight={page.getViewport({ scale: 1 }).height}
         scale={scale}
       />

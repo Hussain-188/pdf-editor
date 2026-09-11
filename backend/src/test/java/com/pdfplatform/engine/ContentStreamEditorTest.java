@@ -56,7 +56,7 @@ class ContentStreamEditorTest {
     private TextBlock findBlock(PDDocument doc) throws IOException {
         PDPage page = doc.getPage(0);
         List<TextRun> runs = parser.parse(page);
-        List<TextBlock> blocks = extractor.extract(runs, page);
+        List<TextBlock> blocks = extractor.extract(runs, page, 1);
         assertFalse(blocks.isEmpty(), "Expected at least one text block");
         return blocks.get(0);
     }
@@ -155,7 +155,7 @@ class ContentStreamEditorTest {
         }
 
         List<TextRun> runs = parser.parse(page);
-        List<TextBlock> blocks = extractor.extract(runs, page);
+        List<TextBlock> blocks = extractor.extract(runs, page, 1);
 
         TextBlock targetBlock = blocks.stream()
                 .filter(b -> b.getFullText().contains("First"))

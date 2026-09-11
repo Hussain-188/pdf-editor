@@ -21,7 +21,7 @@ public class TextBlockExtractor {
     private static final float LINE_SPACING_THRESHOLD = 1.5f; // Factor of font size
     private static final float WORD_SPACING_THRESHOLD = 3.0f; // Factor of average char width
 
-    public List<TextBlock> extract(List<TextRun> runs, PDPage page) {
+    public List<TextBlock> extract(List<TextRun> runs, PDPage page, int pageNumber) {
         if (runs.isEmpty()) return List.of();
 
         List<List<TextRun>> groups = groupRunsIntoBlocks(runs);
@@ -29,11 +29,19 @@ public class TextBlockExtractor {
         int blockIdCounter = 0;
 
         for (List<TextRun> group : groups) {
-            TextBlock block = buildBlock(group, page, ++blockIdCounter);
+            TextBlock block = buildBlock(group, page, ++blockIdCounter, pageNumber);
             if (block != null) blocks.add(block);
         }
 
         return blocks;
+    }
+
+    /**
+     * @deprecated Use {@link #extract(List, PDPage, int)} instead.
+     */
+    @Deprecated
+    public List<TextBlock> extract(List<TextRun> runs, PDPage page) {
+        return extract(runs, page, 0);
     }
 
     private List<List<TextRun>> groupRunsIntoBlocks(List<TextRun> runs) {
@@ -91,7 +99,7 @@ public class TextBlockExtractor {
         return false;
     }
 
-    private TextBlock buildBlock(List<TextRun> runs, PDPage page, int blockIdCounter) {
+    private TextBlock buildBlock(List<TextRun> runs, PDPage page, int blockIdCounter, int pageNumber) {
         if (runs.isEmpty()) return null;
 
         String id = "block-" + blockIdCounter;
@@ -99,7 +107,7 @@ public class TextBlockExtractor {
 
         // Calculate bounding box
         float minX = Float.MAX_VALUE, minY = Float.MAX_VALUE;
-        float maxX = Float.MIN_VALUE, maxY = Float.MIN_VALUE;
+        float maxX = -Float.MAX_VALUE, maxY = -Float.MAX_VALUE;
 
         for (TextRun run : runs) {
             float fontSize = run.getFontSize();
@@ -118,7 +126,7 @@ public class TextBlockExtractor {
         EditabilityInfo editability = assessEditability(first, page);
 
         return new TextBlock(
-                id, 0, runs, minX, minY, width, height,
+                id, pageNumber, runs, minX, minY, width, height,
                 first.getFontName(), first.getFontResourceName(),
                 first.getFontSize(), first.getColor(), editability
         );

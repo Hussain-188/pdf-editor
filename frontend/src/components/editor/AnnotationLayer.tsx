@@ -4,11 +4,12 @@ import { useCoordinateTransform } from '../../hooks/useCoordinateTransform'
 
 interface AnnotationLayerProps {
   pageNumber: number
+  pageWidth: number
   pageHeight: number
   scale: number
 }
 
-export default function AnnotationLayer({ pageNumber, pageHeight, scale }: AnnotationLayerProps) {
+export default function AnnotationLayer({ pageNumber, pageWidth, pageHeight, scale }: AnnotationLayerProps) {
   const annotations = useAnnotationStore((s) => s.getPageAnnotations(pageNumber))
   const activeTool = useAnnotationStore((s) => s.activeTool)
   const activeColor = useAnnotationStore((s) => s.activeColor)
@@ -18,7 +19,7 @@ export default function AnnotationLayer({ pageNumber, pageHeight, scale }: Annot
   const selectAnnotation = useAnnotationStore((s) => s.selectAnnotation)
   const selectedId = useAnnotationStore((s) => s.selectedAnnotationId)
   const deleteAnnotation = useAnnotationStore((s) => s.deleteAnnotation)
-  const { screenToPdf, pdfRectToScreen } = useCoordinateTransform(scale, pageHeight)
+  const { screenToPdf, pdfRectToScreen } = useCoordinateTransform(scale, pageWidth, pageHeight)
 
   const drawLayerRef = useRef<HTMLDivElement>(null)
   const drawingRef = useRef(false)

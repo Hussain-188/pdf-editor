@@ -20,14 +20,23 @@
 
 ### Windows: Fix JAVA_HOME
 
-`JAVA_HOME` must point to the JDK root, **not** the `bin/` subfolder:
+`JAVA_HOME` must point to the JDK root, **not** the `bin/` subfolder.
+
+Find your JDK path:
 
 ```bash
-# Correct
-export JAVA_HOME="C:/Program Files/Eclipse Adoptium/jdk-21.0.6.7-hotspot"
+java -XshowSettings:property -version 2>&1 | grep "java.home"
+# Example output: java.home = C:\Program Files\Java\jdk-21.0.12.1
+```
+
+Then set it (use the path from the command above):
+
+```bash
+# Correct — JDK root directory
+export JAVA_HOME="C:/Program Files/Java/jdk-21.0.12.1"
 
 # Wrong (causes "bin/bin/java not found")
-export JAVA_HOME="C:/Program Files/Eclipse Adoptium/jdk-21.0.6.7-hotspot/bin"
+export JAVA_HOME="C:/Program Files/Java/jdk-21.0.12.1/bin"
 ```
 
 ---
@@ -36,7 +45,14 @@ export JAVA_HOME="C:/Program Files/Eclipse Adoptium/jdk-21.0.6.7-hotspot/bin"
 
 ### 1. Start MySQL
 
-Make sure MySQL is running on port **3307** with the following database:
+Make sure MySQL is running. Check which port it's on (default is **3306**, app defaults to **3307**):
+
+```bash
+# Check if MySQL is listening on 3306 (standard) or 3307
+mysql -u root -proot -h localhost -P 3306 -e "SELECT 1"
+```
+
+Create the database if it doesn't exist:
 
 ```sql
 CREATE DATABASE IF NOT EXISTS pdfplatform;
@@ -52,11 +68,13 @@ Default connection settings (configured in `application.yml`):
 | Username | root        |
 | Password | root        |
 
+> **Note:** Most MySQL installations run on port **3306**. If yours does, set `DB_PORT=3306` before starting the backend.
+
 To use different credentials, set environment variables before starting the backend:
 
 ```bash
 export DB_HOST=localhost
-export DB_PORT=3307
+export DB_PORT=3306   # Change to 3307 if your MySQL uses that port
 export DB_NAME=pdfplatform
 export DB_USER=root
 export DB_PASSWORD=root
@@ -67,8 +85,11 @@ export DB_PASSWORD=root
 ```bash
 cd backend
 
-# Set JAVA_HOME if not already in your profile
-export JAVA_HOME="C:/Program Files/Eclipse Adoptium/jdk-21.0.6.7-hotspot"
+# Set JAVA_HOME if not already in your profile (find yours with: java -XshowSettings:property -version)
+export JAVA_HOME="C:/Program Files/Java/jdk-21.0.12.1"
+
+# Set DB_PORT if your MySQL is on 3306 instead of 3307
+export DB_PORT=3306
 
 # First time: compiles and downloads dependencies (~2-3 minutes)
 ./mvnw spring-boot:run
@@ -253,7 +274,7 @@ Then restart the backend — Flyway re-runs all migrations.
 
 ```bash
 cd backend
-export JAVA_HOME="C:/Program Files/Eclipse Adoptium/jdk-21.0.6.7-hotspot"
+export JAVA_HOME="C:/Program Files/Java/jdk-21.0.12.1"
 
 ./mvnw test                                  # All tests
 ./mvnw test -Dtest="PdfValidationServiceTest" # Specific class
@@ -315,18 +336,22 @@ openssl rand -base64 48
 
 ### "bin/bin/java not found"
 
-`JAVA_HOME` includes `/bin`. Fix:
+`JAVA_HOME` includes `/bin`. Fix by pointing to the JDK root:
 
 ```bash
-export JAVA_HOME="C:/Program Files/Eclipse Adoptium/jdk-21.0.6.7-hotspot"
+# Find the correct path first
+java -XshowSettings:property -version 2>&1 | grep "java.home"
+
+# Then export it (without /bin)
+export JAVA_HOME="C:/Program Files/Java/jdk-21.0.12.1"
 ```
 
 ### Backend won't connect to MySQL
 
-Check MySQL is running on port 3307:
+Check MySQL is running on the expected port (3306 or 3307):
 
 ```bash
-mysql -u root -proot -h localhost -P 3307 -e "SELECT 1"
+mysql -u root -proot -h localhost -P 3306 -e "SELECT 1"
 ```
 
 ### Frontend blank page / API errors

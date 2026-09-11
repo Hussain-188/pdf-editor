@@ -2,6 +2,7 @@ package com.pdfplatform.document.repository;
 
 import com.pdfplatform.document.entity.DocumentOperation;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -22,4 +23,8 @@ public interface DocumentOperationRepository extends JpaRepository<DocumentOpera
 
     @Query("SELECT o FROM DocumentOperation o WHERE o.document.id = :docId AND o.undone = true ORDER BY o.sequenceNumber ASC")
     List<DocumentOperation> findRedoable(@Param("docId") UUID documentId);
+
+    @Modifying
+    @Query("DELETE FROM DocumentOperation o WHERE o.document.id = :docId AND o.undone = true")
+    void deleteUndoneByDocumentId(@Param("docId") UUID documentId);
 }
