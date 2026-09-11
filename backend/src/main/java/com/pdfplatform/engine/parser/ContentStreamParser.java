@@ -7,6 +7,7 @@ import org.apache.pdfbox.pdfparser.PDFStreamParser;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDResources;
 import org.apache.pdfbox.pdmodel.font.PDFont;
+import org.apache.pdfbox.pdmodel.graphics.state.PDExtendedGraphicsState;
 import org.apache.pdfbox.util.Matrix;
 import org.springframework.stereotype.Service;
 
@@ -68,6 +69,7 @@ public class ContentStreamParser {
         String currentFontResourceName;
         float currentFontSize = 12;
         float[] currentColor = {0, 0, 0};
+        int nonStrokingColorComponents = 3;
         float wordSpacing;
         float charSpacing;
         float textLeading;
@@ -136,7 +138,9 @@ public class ContentStreamParser {
             case "q" -> handleQ(ctx);
             case "Q" -> handleQRestore(ctx);
 
-            case "cs", "sc", "scn" -> {}
+            case "cs" -> handleCs(ctx, operands);
+            case "sc", "scn" -> handleSc(ctx, operands);
+            case "gs" -> handleGs(ctx, operands);
             default -> {}
         }
     }
@@ -346,6 +350,65 @@ public class ContentStreamParser {
                 (1 - m) * (1 - k),
                 (1 - y) * (1 - k)
             };
+        }
+    }
+
+    // --- Color Space / Extended Graphics State Operators ---
+
+    private void handleCs(ParseContext ctx, List<COSBase> operands) {
+        if (operands.isEmpty()) return;
+        String csName = ((COSName) operands.get(0)).getName();
+        switch (csName) {
+            case "DeviceGray" -> ctx.nonStrokingColorComponents = 1;
+            case "DeviceRGB" -> ctx.nonStrokingColorComponents = 3;
+            case "DeviceCMYK" -> ctx.nonStrokingColorComponents = 4;
+            default -> ctx.nonStrokingColorComponents = 3;
+        }
+    }
+
+    private void handleSc(ParseContext ctx, List<COSBase> operands) {
+        List<COSBase> numbers = operands.stream()
+                .filter(o -> o instanceof COSNumber)
+                .toList();
+        if (numbers.isEmpty()) return;
+
+        if (numbers.size() == 1) {
+            float g = ((COSNumber) numbers.get(0)).floatValue();
+            ctx.currentColor = new float[]{g, g, g};
+        } else if (numbers.size() == 3) {
+            ctx.currentColor = new float[]{
+                ((COSNumber) numbers.get(0)).floatValue(),
+                ((COSNumber) numbers.get(1)).floatValue(),
+                ((COSNumber) numbers.get(2)).floatValue()
+            };
+        } else if (numbers.size() >= 4) {
+            float c = ((COSNumber) numbers.get(0)).floatValue();
+            float m = ((COSNumber) numbers.get(1)).floatValue();
+            float y = ((COSNumber) numbers.get(2)).floatValue();
+            float k = ((COSNumber) numbers.get(3)).floatValue();
+            ctx.currentColor = new float[]{
+                (1 - c) * (1 - k),
+                (1 - m) * (1 - k),
+                (1 - y) * (1 - k)
+            };
+        }
+    }
+
+    private void handleGs(ParseContext ctx, List<COSBase> operands) {
+        if (operands.isEmpty() || ctx.resources == null) return;
+        COSName gsName = (COSName) operands.get(0);
+        try {
+            PDExtendedGraphicsState gs = ctx.resources.getExtGState(gsName);
+            if (gs == null) return;
+            if (gs.getFontSetting() != null) {
+                ctx.currentFontSize = gs.getFontSetting().getFontSize();
+                PDFont font = gs.getFontSetting().getFont();
+                if (font != null) {
+                    ctx.currentFont = font;
+                }
+            }
+        } catch (IOException e) {
+            // ignore unresolvable ExtGState
         }
     }
 

@@ -34,7 +34,8 @@ export default function EditorPage() {
   const setActiveTool = useAnnotationStore((s) => s.setActiveTool)
 
   const [pdfDoc, setPdfDoc] = useState<PDFDocumentProxy | null>(null)
-  const [pages, setPages] = useState<PDFPageProxy[]>([])
+  const [pages, setPages] = useState<(PDFPageProxy | undefined)[]>([])
+  const [pageCount, setPageCount] = useState(0)
   const [currentPage, setCurrentPage] = useState(1)
   const [docTitle, setDocTitle] = useState('')
   const [loading, setLoading] = useState(true)
@@ -82,18 +83,36 @@ export default function EditorPage() {
 
   const generateThumbnails = useCallback(async (doc: PDFDocumentProxy) => {
     const newThumbnails = new Map<number, string>()
+    const batchSize = 5
     for (let i = 1; i <= doc.numPages; i++) {
       const page = await doc.getPage(i)
-      const vp = page.getViewport({ scale: 0.2 })
+      const vp = page.getViewport({ scale: 0.15 })
       const canvas = document.createElement('canvas')
       canvas.width = vp.width
       canvas.height = vp.height
       const ctx = canvas.getContext('2d')!
       await page.render({ canvas, canvasContext: ctx, viewport: vp }).promise
       newThumbnails.set(i, canvas.toDataURL())
+      if (i % batchSize === 0) {
+        setThumbnailUrls(new Map(newThumbnails))
+        await new Promise(r => setTimeout(r, 0))
+      }
     }
-    setThumbnailUrls(newThumbnails)
+    setThumbnailUrls(new Map(newThumbnails))
   }, [])
+
+  const loadPagesInRange = useCallback(async (doc: PDFDocumentProxy, start: number, end: number, existing: (PDFPageProxy | undefined)[]) => {
+    const newPages = [...existing]
+    const clampedEnd = Math.min(end, doc.numPages)
+    for (let i = start; i <= clampedEnd; i++) {
+      if (!newPages[i - 1]) {
+        newPages[i - 1] = await doc.getPage(i)
+      }
+    }
+    return newPages
+  }, [])
+
+  const BUFFER_PAGES = 3
 
   const loadDocument = async (docId: string) => {
     try {
@@ -106,13 +125,12 @@ export default function EditorPage() {
       const pdfData = await pdfResponse.arrayBuffer()
       const doc = await getDocument({ data: pdfData }).promise
       setPdfDoc(doc)
+      setPageCount(doc.numPages)
 
-      const loadedPages: PDFPageProxy[] = []
-      for (let i = 1; i <= doc.numPages; i++) {
-        const page = await doc.getPage(i)
-        loadedPages.push(page)
-      }
-      setPages(loadedPages)
+      const initialEnd = Math.min(doc.numPages, BUFFER_PAGES + 1)
+      const initialPages = new Array<PDFPageProxy | undefined>(doc.numPages).fill(undefined)
+      const loaded = await loadPagesInRange(doc, 1, initialEnd, initialPages)
+      setPages(loaded)
       setLoading(false)
 
       generateThumbnails(doc)
@@ -136,15 +154,16 @@ export default function EditorPage() {
       const pdfData = await pdfResponse.arrayBuffer()
       const doc = await getDocument({ data: pdfData }).promise
       setPdfDoc(doc)
+      setPageCount(doc.numPages)
 
-      const loadedPages: PDFPageProxy[] = []
-      for (let i = 1; i <= doc.numPages; i++) {
-        loadedPages.push(await doc.getPage(i))
-      }
-      setPages(loadedPages)
+      const start = Math.max(1, currentPage - BUFFER_PAGES)
+      const end = Math.min(doc.numPages, currentPage + BUFFER_PAGES)
+      const reloadedPages = new Array<PDFPageProxy | undefined>(doc.numPages).fill(undefined)
+      const loaded = await loadPagesInRange(doc, start, end, reloadedPages)
+      setPages(loaded)
       generateThumbnails(doc)
     } catch { /* ignore reload errors */ }
-  }, [id, pdfDoc, generateThumbnails])
+  }, [id, pdfDoc, generateThumbnails, currentPage, loadPagesInRange])
 
   const handlePageAction = useCallback(async (action: () => Promise<any>) => {
     try {
@@ -200,7 +219,7 @@ export default function EditorPage() {
 
   const handleScroll = useCallback(() => {
     const container = scrollContainerRef.current
-    if (!container || pages.length === 0) return
+    if (!container || pageCount === 0) return
 
     const scrollTop = container.scrollTop + container.clientHeight / 3
     const pageElements = container.querySelectorAll('[data-page-number]')
@@ -214,7 +233,22 @@ export default function EditorPage() {
     })
 
     setCurrentPage(current)
-  }, [pages.length])
+  }, [pageCount])
+
+  useEffect(() => {
+    if (!pdfDoc || pageCount === 0) return
+    const start = Math.max(1, currentPage - BUFFER_PAGES)
+    const end = Math.min(pageCount, currentPage + BUFFER_PAGES)
+    const needsLoad = Array.from({ length: end - start + 1 }, (_, i) => start + i)
+      .some(i => !pages[i - 1])
+    if (!needsLoad) return
+
+    let cancelled = false
+    loadPagesInRange(pdfDoc, start, end, pages).then(loaded => {
+      if (!cancelled) setPages(loaded)
+    })
+    return () => { cancelled = true }
+  }, [currentPage, pdfDoc, pageCount, loadPagesInRange])
 
   const handlePropertiesUpdate = useCallback(() => {
     if (id) {
@@ -302,7 +336,9 @@ export default function EditorPage() {
     if (pages.length === 0) return
     const container = scrollContainerRef.current
     if (!container) return
-    const pageWidth = pages[0].getViewport({ scale: 1 }).width
+    const firstPage = pages.find(Boolean)
+    if (!firstPage) return
+    const pageWidth = firstPage.getViewport({ scale: 1 }).width
     const containerWidth = container.clientWidth - 32 // account for padding
     if (containerWidth > 0 && pageWidth > 0) {
       fitToWidth(containerWidth, pageWidth)
@@ -349,7 +385,7 @@ export default function EditorPage() {
       <Toolbar
         scale={viewport.scale}
         currentPage={currentPage}
-        totalPages={pages.length}
+        totalPages={pageCount || pages.length}
         documentTitle={docTitle}
         documentId={id}
         onZoomIn={zoomIn}
@@ -375,7 +411,7 @@ export default function EditorPage() {
 
       <div className="flex-1 flex overflow-hidden">
         <PagePanel
-          pageCount={pages.length}
+          pageCount={pageCount || pages.length}
           currentPage={currentPage}
           scale={viewport.scale}
           onPageClick={scrollToPage}
@@ -394,18 +430,35 @@ export default function EditorPage() {
           className="flex-1 overflow-auto py-6 px-4"
           style={{ background: 'linear-gradient(180deg, #f1f5f9 0%, #e2e8f0 100%)' }}
         >
-          {pages.map((page, index) => (
-            <PageRenderer
-              key={page.pageNumber}
-              page={page}
-              scale={viewport.scale}
-              pageNumber={index + 1}
-              showOverlay={editorMode === 'edit' && !analysisLoading}
-              documentId={id}
-              onDocumentChanged={reloadDocument}
-              onError={(msg) => { setOperationError(msg); setTimeout(() => setOperationError(null), 5000) }}
-            />
-          ))}
+          {pages.map((page, index) => {
+            if (!page) {
+              return (
+                <div
+                  key={`placeholder-${index + 1}`}
+                  data-page-number={index + 1}
+                  className="bg-white shadow-lg mx-auto mb-6 rounded-sm flex items-center justify-center"
+                  style={{
+                    width: pages.find(Boolean)?.getViewport({ scale: viewport.scale })?.width ?? 600 * viewport.scale,
+                    height: pages.find(Boolean)?.getViewport({ scale: viewport.scale })?.height ?? 800 * viewport.scale,
+                  }}
+                >
+                  <span className="text-gray-400 text-sm">Page {index + 1}</span>
+                </div>
+              )
+            }
+            return (
+              <PageRenderer
+                key={page.pageNumber}
+                page={page}
+                scale={viewport.scale}
+                pageNumber={index + 1}
+                showOverlay={editorMode === 'edit' && !analysisLoading}
+                documentId={id}
+                onDocumentChanged={reloadDocument}
+                onError={(msg) => { setOperationError(msg); setTimeout(() => setOperationError(null), 5000) }}
+              />
+            )
+          })}
         </div>
 
         {editorMode === 'edit' && selectedBlock && id && (
@@ -431,7 +484,7 @@ export default function EditorPage() {
       {id && (
         <ExportDialog
           documentId={id}
-          pageCount={pages.length}
+          pageCount={pageCount || pages.length}
           open={showExportDialog}
           onClose={() => setShowExportDialog(false)}
         />
