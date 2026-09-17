@@ -21,7 +21,7 @@ interface Tool {
   color: string
   bgColor: string
   fields: ToolField[]
-  responseType?: 'pdf' | 'zip' | 'image'
+  responseType?: 'pdf' | 'zip' | 'image' | 'docx'
   dedicatedPage?: string
 }
 
@@ -285,6 +285,17 @@ const allTools: Tool[] = [
     fields: [],
   },
   {
+    id: 'pdf-to-docx',
+    name: 'PDF to Word',
+    description: 'Convert PDF to editable Word document (.docx)',
+    endpoint: '/tools/pdf-to-docx',
+    icon: <FileText className="w-7 h-7" />,
+    color: 'text-blue-600',
+    bgColor: 'bg-blue-50 hover:bg-blue-100 border-blue-200',
+    responseType: 'docx',
+    fields: [],
+  },
+  {
     id: 'crop',
     name: 'Crop PDF',
     description: 'Remove margins and crop PDF pages',
@@ -535,7 +546,7 @@ const toolCategories: ToolCategory[] = [
   },
   {
     title: 'Convert',
-    tools: allTools.filter((t) => ['images-to-pdf', 'pdf-to-images', 'pdf-to-text'].includes(t.id)),
+    tools: allTools.filter((t) => ['images-to-pdf', 'pdf-to-images', 'pdf-to-text', 'pdf-to-docx'].includes(t.id)),
   },
   {
     title: 'Security',
@@ -624,7 +635,8 @@ export default function ToolsPage() {
       const a = document.createElement('a')
       a.href = url
       const baseName = file.name.replace('.pdf', '')
-      const ext = activeTool.responseType === 'zip' ? 'zip' : 'pdf'
+      const extMap: Record<string, string> = { zip: 'zip', docx: 'docx', image: 'png' }
+      const ext = extMap[activeTool.responseType || ''] || 'pdf'
       a.download = `${baseName}_${activeTool.id}.${ext}`
       a.click()
       URL.revokeObjectURL(url)

@@ -62,6 +62,7 @@ const TOOL_CATEGORIES = [
       { title: 'Images to PDF', description: 'Convert JPG/PNG to PDF.', icon: Image, color: 'text-teal-600', bg: 'bg-teal-50', route: '/images-to-pdf' },
       { title: 'PDF to Images', description: 'Convert pages to JPG/PNG.', icon: FileImage, color: 'text-emerald-600', bg: 'bg-emerald-50', route: '/tools?tool=pdf-to-images' },
       { title: 'PDF to Text', description: 'Extract all text from PDF.', icon: AlignLeft, color: 'text-cyan-600', bg: 'bg-cyan-50', route: '/tools?tool=pdf-to-text' },
+      { title: 'PDF to Word', description: 'Convert PDF to editable DOCX.', icon: FileText, color: 'text-blue-600', bg: 'bg-blue-50', route: '/tools?tool=pdf-to-docx' },
     ],
   },
   {

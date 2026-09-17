@@ -4,13 +4,13 @@
 
 ## Prerequisites
 
-| Tool       | Version | Verify Command  | Download                              |
-|------------|---------|-----------------|---------------------------------------|
-| Java (JDK) | 21+    | `java -version` | Eclipse Temurin: https://adoptium.net/ |
-| Node.js    | 20+    | `node -v`       | https://nodejs.org/                    |
-| npm        | 10+    | `npm -v`        | Bundled with Node.js                   |
-| MySQL      | 5.7+   | `mysql --version`| https://dev.mysql.com/downloads/       |
-| Git        | 2.40+  | `git --version` | https://git-scm.com/                   |
+| Tool       | Version | Verify Command   | Download                              |
+|------------|---------|------------------|---------------------------------------|
+| Java (JDK) | 21+    | `java -version`  | Oracle: https://www.oracle.com/java/  |
+| Node.js    | 20+    | `node -v`        | https://nodejs.org/                   |
+| npm        | 10+    | `npm -v`         | Bundled with Node.js                  |
+| MySQL      | 8.0+   | `mysql --version`| https://dev.mysql.com/downloads/      |
+| Git        | 2.40+  | `git --version`  | https://git-scm.com/                  |
 
 ### Optional
 
@@ -18,16 +18,17 @@
 |------------|---------|---------------------------|
 | Tesseract  | 5.x    | OCR on scanned PDFs       |
 
-### Windows: Fix JAVA_HOME
+### Windows Notes
 
-`JAVA_HOME` must point to the JDK root, **not** the `bin/` subfolder:
+- **Use Git Bash** to run backend commands (`./mvnw`). There is no `mvnw.cmd` wrapper, so CMD/PowerShell won't work for Maven commands.
+- `JAVA_HOME` must point to the JDK root, **not** the `bin/` subfolder:
 
 ```bash
 # Correct
-export JAVA_HOME="C:/Program Files/Eclipse Adoptium/jdk-21.0.6.7-hotspot"
+export JAVA_HOME="C:/Program Files/Java/jdk-21.0.12.1"
 
 # Wrong (causes "bin/bin/java not found")
-export JAVA_HOME="C:/Program Files/Eclipse Adoptium/jdk-21.0.6.7-hotspot/bin"
+export JAVA_HOME="C:/Program Files/Java/jdk-21.0.12.1/bin"
 ```
 
 ---
@@ -36,7 +37,7 @@ export JAVA_HOME="C:/Program Files/Eclipse Adoptium/jdk-21.0.6.7-hotspot/bin"
 
 ### 1. Start MySQL
 
-Make sure MySQL is running on port **3307** with the following database:
+Make sure MySQL is running on port **3306** (default) with the following database:
 
 ```sql
 CREATE DATABASE IF NOT EXISTS pdfplatform;
@@ -47,7 +48,7 @@ Default connection settings (configured in `application.yml`):
 | Setting  | Value       |
 |----------|-------------|
 | Host     | localhost   |
-| Port     | 3307        |
+| Port     | 3306        |
 | Database | pdfplatform |
 | Username | root        |
 | Password | root        |
@@ -56,7 +57,7 @@ To use different credentials, set environment variables before starting the back
 
 ```bash
 export DB_HOST=localhost
-export DB_PORT=3307
+export DB_PORT=3306
 export DB_NAME=pdfplatform
 export DB_USER=root
 export DB_PASSWORD=root
@@ -68,7 +69,7 @@ export DB_PASSWORD=root
 cd backend
 
 # Set JAVA_HOME if not already in your profile
-export JAVA_HOME="C:/Program Files/Eclipse Adoptium/jdk-21.0.6.7-hotspot"
+export JAVA_HOME="C:/Program Files/Java/jdk-21.0.12.1"
 
 # First time: compiles and downloads dependencies (~2-3 minutes)
 ./mvnw spring-boot:run
@@ -103,7 +104,7 @@ The frontend starts on **http://localhost:3000** with hot module replacement. Th
 
 This app runs **without Docker, Redis, or MinIO**:
 
-- **Database**: MySQL 5.7+ on port 3307
+- **Database**: MySQL 8.0+ on port 3306
 - **File storage**: Local filesystem at `./storage` (relative to backend working directory)
 - **No Redis**: No caching layer required
 - **No MinIO/S3**: Files stored directly on disk
@@ -130,7 +131,7 @@ All have dev defaults — only set these for custom setups or production.
 | Variable                 | Default                                                       | Description             |
 |--------------------------|---------------------------------------------------------------|-------------------------|
 | `DB_HOST`                | `localhost`                                                   | MySQL host              |
-| `DB_PORT`                | `3307`                                                        | MySQL port              |
+| `DB_PORT`                | `3306`                                                        | MySQL port              |
 | `DB_NAME`                | `pdfplatform`                                                 | Database name           |
 | `DB_USER`                | `root`                                                        | Database username       |
 | `DB_PASSWORD`            | `root`                                                        | Database password       |
@@ -253,7 +254,7 @@ Then restart the backend — Flyway re-runs all migrations.
 
 ```bash
 cd backend
-export JAVA_HOME="C:/Program Files/Eclipse Adoptium/jdk-21.0.6.7-hotspot"
+export JAVA_HOME="C:/Program Files/Java/jdk-21.0.12.1"
 
 ./mvnw test                                  # All tests
 ./mvnw test -Dtest="PdfValidationServiceTest" # Specific class
@@ -318,15 +319,15 @@ openssl rand -base64 48
 `JAVA_HOME` includes `/bin`. Fix:
 
 ```bash
-export JAVA_HOME="C:/Program Files/Eclipse Adoptium/jdk-21.0.6.7-hotspot"
+export JAVA_HOME="C:/Program Files/Java/jdk-21.0.12.1"
 ```
 
 ### Backend won't connect to MySQL
 
-Check MySQL is running on port 3307:
+Check MySQL is running on port 3306:
 
 ```bash
-mysql -u root -proot -h localhost -P 3307 -e "SELECT 1"
+mysql -u root -proot -h localhost -P 3306 -e "SELECT 1"
 ```
 
 ### Frontend blank page / API errors
@@ -347,7 +348,7 @@ Default limits: guest 50 MB, authenticated 200 MB. Configured in `application.ym
 |------|-----------------------|
 | 3000 | Frontend (Vite dev)   |
 | 8080 | Backend (Spring Boot) |
-| 3307 | MySQL                 |
+| 3306 | MySQL                 |
 
 ---
 

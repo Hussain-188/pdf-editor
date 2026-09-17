@@ -9,12 +9,10 @@ import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.common.PDStream;
 import org.apache.pdfbox.pdmodel.font.PDFont;
-import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.springframework.stereotype.Service;
 
 import java.io.*;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -48,27 +46,14 @@ public class ContentStreamEditor {
                     "' not found in page resources");
         }
 
-        // Try the original font first; fall back to a standard font if encoding fails
-        PDFont effectiveFont = originalFont;
-        String effectiveFontResourceName = textBlock.getFontResourceName();
-        boolean fontChanged = false;
-        try {
-            validateEncoding(originalFont, newText);
-        } catch (IOException encodingError) {
-            effectiveFont = getOrCreateFallbackFont(document, page, textBlock.getFontName());
-            effectiveFontResourceName = findResourceName(page, effectiveFont);
-            fontChanged = true;
-            validateEncoding(effectiveFont, newText);
-        }
+        // Always use the original font — never silently substitute a different font.
+        // Only validate characters that are truly new (not already in the old text).
+        validateEncodingForEdit(originalFont, oldText, newText);
 
         PDFStreamParser parser = new PDFStreamParser(page);
         List<Object> tokens = parser.parse();
 
-        if (fontChanged) {
-            insertFontChange(tokens, textBlock, effectiveFontResourceName, textBlock.getFontSize());
-        }
-
-        boolean replaced = replaceInTokens(tokens, textBlock, oldText, newText, effectiveFont);
+        boolean replaced = replaceInTokens(tokens, textBlock, oldText, newText, originalFont);
 
         if (!replaced) {
             return false;
@@ -396,82 +381,6 @@ public class ContentStreamEditor {
         return false;
     }
 
-    // --- Font Fallback ---
-
-    private PDFont getOrCreateFallbackFont(PDDocument document, PDPage page, String originalFontName) throws IOException {
-        // Pick the closest Standard 14 match based on the original font name
-        String lower = originalFontName != null ? originalFontName.toLowerCase() : "";
-        org.apache.pdfbox.pdmodel.font.Standard14Fonts.FontName std;
-        if (lower.contains("bold") && lower.contains("italic")) {
-            std = lower.contains("times") || lower.contains("serif")
-                    ? org.apache.pdfbox.pdmodel.font.Standard14Fonts.FontName.TIMES_BOLD_ITALIC
-                    : org.apache.pdfbox.pdmodel.font.Standard14Fonts.FontName.HELVETICA_BOLD_OBLIQUE;
-        } else if (lower.contains("bold")) {
-            std = lower.contains("times") || lower.contains("serif")
-                    ? org.apache.pdfbox.pdmodel.font.Standard14Fonts.FontName.TIMES_BOLD
-                    : lower.contains("courier") || lower.contains("mono")
-                    ? org.apache.pdfbox.pdmodel.font.Standard14Fonts.FontName.COURIER_BOLD
-                    : org.apache.pdfbox.pdmodel.font.Standard14Fonts.FontName.HELVETICA_BOLD;
-        } else if (lower.contains("italic") || lower.contains("oblique")) {
-            std = lower.contains("times") || lower.contains("serif")
-                    ? org.apache.pdfbox.pdmodel.font.Standard14Fonts.FontName.TIMES_ITALIC
-                    : org.apache.pdfbox.pdmodel.font.Standard14Fonts.FontName.HELVETICA_OBLIQUE;
-        } else {
-            std = lower.contains("times") || lower.contains("serif") || lower.contains("roman")
-                    ? org.apache.pdfbox.pdmodel.font.Standard14Fonts.FontName.TIMES_ROMAN
-                    : lower.contains("courier") || lower.contains("mono")
-                    ? org.apache.pdfbox.pdmodel.font.Standard14Fonts.FontName.COURIER
-                    : org.apache.pdfbox.pdmodel.font.Standard14Fonts.FontName.HELVETICA;
-        }
-
-        PDType1Font fallback = new PDType1Font(std);
-
-        // Add to page resources under a unique name
-        if (page.getResources() == null) {
-            page.setResources(new org.apache.pdfbox.pdmodel.PDResources());
-        }
-        COSName resourceName = page.getResources().add(fallback);
-        return fallback;
-    }
-
-    private String findResourceName(PDPage page, PDFont font) throws IOException {
-        if (page.getResources() == null) return "F1";
-        for (COSName name : page.getResources().getFontNames()) {
-            PDFont f = page.getResources().getFont(name);
-            if (f == font || (f != null && f.getName() != null && f.getName().equals(font.getName()))) {
-                return name.getName();
-            }
-        }
-        return "F1";
-    }
-
-    private void insertFontChange(List<Object> tokens, TextBlock textBlock,
-                                  String newFontResourceName, float fontSize) {
-        // Find the Tf operator before the block's first text operator and change it
-        List<TextRun> runs = textBlock.getRuns();
-        if (runs.isEmpty()) return;
-
-        int targetOpIndex = runs.get(0).getOperatorIndex();
-        int currentOpIndex = 0;
-        int lastTfPosition = -1;
-
-        for (int i = 0; i < tokens.size(); i++) {
-            if (tokens.get(i) instanceof Operator op) {
-                if ("Tf".equals(op.getName())) {
-                    lastTfPosition = i;
-                }
-                if (currentOpIndex == targetOpIndex) {
-                    // Replace the font name in the last Tf before this text operator
-                    if (lastTfPosition >= 2) {
-                        tokens.set(lastTfPosition - 2, COSName.getPDFName(newFontResourceName));
-                        tokens.set(lastTfPosition - 1, new COSFloat(fontSize));
-                    }
-                    return;
-                }
-                currentOpIndex++;
-            }
-        }
-    }
 
     // --- Utility Methods ---
 
@@ -480,37 +389,90 @@ public class ContentStreamEditor {
         return page.getResources().getFont(COSName.getPDFName(fontResourceName));
     }
 
-    private void validateEncoding(PDFont font, String text) throws IOException {
+    private void validateEncodingForEdit(PDFont font, String oldText, String newText) throws IOException {
+        // Fast path: try encoding the entire new text as a single call.
+        try {
+            font.encode(newText);
+            return;
+        } catch (IllegalArgumentException | IOException wholeStringFailed) {
+            // Fall through to per-character analysis
+        }
+
+        // Characters from oldText are already in the PDF and known to work.
+        // Whitespace is handled by encodeString's fallback (raw byte 0x20).
+        Set<Character> oldChars = new HashSet<>();
+        for (char c : oldText.toCharArray()) {
+            oldChars.add(c);
+        }
+
         List<Character> unsupported = new ArrayList<>();
-        for (int i = 0; i < text.length(); i++) {
-            char c = text.charAt(i);
+        for (int i = 0; i < newText.length(); i++) {
+            char c = newText.charAt(i);
+            if (oldChars.contains(c) || Character.isWhitespace(c)) continue;
             try {
-                byte[] encoded = font.encode(String.valueOf(c));
-                if (encoded == null || encoded.length == 0) {
+                byte[] enc = font.encode(String.valueOf(c));
+                if (enc == null || enc.length == 0) {
                     unsupported.add(c);
                 }
             } catch (IllegalArgumentException | IOException e) {
                 unsupported.add(c);
             }
         }
-        if (!unsupported.isEmpty()) {
-            String chars = unsupported.stream()
-                    .map(c -> "'" + c + "'")
-                    .distinct()
-                    .reduce((a, b) -> a + ", " + b)
-                    .orElse("");
-            boolean isSubset = font.getName() != null && font.getName().contains("+");
-            String hint = isSubset
-                    ? ". This is a subset font — only characters from the original document are available. Try using only letters that appear elsewhere in this text block."
-                    : "";
-            throw new IOException("Characters " + chars + " cannot be encoded with this font" + hint);
+
+        if (unsupported.isEmpty()) {
+            return;
         }
+
+        String chars = unsupported.stream()
+                .map(c -> "'" + c + "'")
+                .distinct()
+                .reduce((a, b) -> a + ", " + b)
+                .orElse("");
+        boolean isSubset = font.getName() != null && font.getName().contains("+");
+        String hint = isSubset
+                ? ". This is a subset font — only characters present in the original document are available"
+                : "";
+        throw new IOException("Characters " + chars + " cannot be encoded with font '"
+                + font.getName() + "'" + hint
+                + ". Try using characters that already appear in this text block.");
     }
 
     private COSString encodeString(String text, PDFont font) throws IOException {
-        byte[] encoded = font.encode(text);
-        COSString result = new COSString(encoded);
-        return result;
+        // Fast path: try encoding the whole string at once
+        try {
+            return new COSString(font.encode(text));
+        } catch (IllegalArgumentException | IOException e) {
+            // Fall back to character-by-character with whitespace handling
+            return encodeStringWithFallback(text, font);
+        }
+    }
+
+    private COSString encodeStringWithFallback(String text, PDFont font) throws IOException {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        boolean isType0 = font instanceof org.apache.pdfbox.pdmodel.font.PDType0Font;
+
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            try {
+                baos.write(font.encode(String.valueOf(c)));
+            } catch (IllegalArgumentException | IOException e) {
+                if (c == ' ' || Character.isWhitespace(c)) {
+                    if (isType0) {
+                        // Type0/CID fonts use 2-byte codes
+                        baos.write(0x00);
+                        baos.write(0x20);
+                    } else {
+                        // Type1/Simple fonts: space is at byte position 0x20
+                        baos.write(0x20);
+                    }
+                } else {
+                    throw new IOException("Character '" + c + "' (U+"
+                            + String.format("%04X", (int) c)
+                            + ") cannot be encoded with font '" + font.getName() + "'");
+                }
+            }
+        }
+        return new COSString(baos.toByteArray());
     }
 
     private String decodeString(COSString cosString, PDFont font) throws IOException {

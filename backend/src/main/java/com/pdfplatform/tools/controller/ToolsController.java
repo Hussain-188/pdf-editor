@@ -44,6 +44,7 @@ public class ToolsController {
     private final AlternateMixService alternateMixService;
     private final DeskewService deskewService;
     private final BookmarkService bookmarkService;
+    private final PdfToDocxService pdfToDocxService;
 
     public ToolsController(CompressService compressService, WatermarkService watermarkService,
                            ProtectService protectService, PageNumberService pageNumberService,
@@ -58,7 +59,7 @@ public class ToolsController {
                            FormService formService, CompareService compareService,
                            MetadataService metadataService, ExtractImagesService extractImagesService,
                            AlternateMixService alternateMixService, DeskewService deskewService,
-                           BookmarkService bookmarkService) {
+                           BookmarkService bookmarkService, PdfToDocxService pdfToDocxService) {
         this.compressService = compressService;
         this.watermarkService = watermarkService;
         this.protectService = protectService;
@@ -86,6 +87,7 @@ public class ToolsController {
         this.alternateMixService = alternateMixService;
         this.deskewService = deskewService;
         this.bookmarkService = bookmarkService;
+        this.pdfToDocxService = pdfToDocxService;
     }
 
     @PostMapping("/compress")
@@ -295,6 +297,17 @@ public class ToolsController {
                 .contentType(MediaType.TEXT_PLAIN)
                 .contentLength(textBytes.length)
                 .body(textBytes);
+    }
+
+    @PostMapping("/pdf-to-docx")
+    public ResponseEntity<byte[]> pdfToDocx(
+            @RequestParam("file") MultipartFile file) throws Exception {
+        byte[] result = pdfToDocxService.convert(file.getBytes());
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"converted.docx\"")
+                .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.wordprocessingml.document"))
+                .contentLength(result.length)
+                .body(result);
     }
 
     @PostMapping("/bates-number")
