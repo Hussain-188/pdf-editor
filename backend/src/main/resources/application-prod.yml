@@ -13,7 +13,7 @@ server:
 
 app:
   cors:
-    allowed-origins: ${CORS_ORIGINS:https://your-domain.com}
+    allowed-origins: ${CORS_ORIGINS:*}
 
 logging:
   level:
