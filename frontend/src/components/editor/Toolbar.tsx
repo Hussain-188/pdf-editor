@@ -1,10 +1,8 @@
 import { useState } from 'react'
 import {
-  ArrowLeft, Save, Download, History, Undo2, Redo2,
-  ZoomIn, ZoomOut, Type, Pencil, LayoutGrid, ChevronDown,
+  ArrowLeft, Download, ZoomIn, ZoomOut, Type, Pencil, LayoutGrid, ChevronDown,
   PenTool, Search,
 } from 'lucide-react'
-import api from '../../lib/api'
 
 export type EditorMode = 'edit' | 'annotate' | 'pages'
 
@@ -13,16 +11,12 @@ interface ToolbarProps {
   currentPage: number
   totalPages: number
   documentTitle: string
-  documentId?: string
   onZoomIn: () => void
   onZoomOut: () => void
   onScaleChange: (scale: number) => void
   onBack: () => void
-  onUndo: () => void
-  onRedo: () => void
   onExport: () => void
-  onShowHistory: () => void
-  onSave: () => void
+  onDownload: () => void
   onSign: () => void
   onFindReplace: () => void
   editorMode: EditorMode
@@ -36,54 +30,28 @@ const modes: { key: EditorMode; label: string; Icon: typeof Type }[] = [
 ]
 
 export default function Toolbar({
-  scale, currentPage, totalPages, documentTitle, documentId,
-  onZoomIn, onZoomOut, onScaleChange, onBack, onUndo, onRedo,
-  onExport, onShowHistory, onSave, onSign, onFindReplace, editorMode, onModeChange,
+  scale, currentPage, totalPages, documentTitle,
+  onZoomIn, onZoomOut, onScaleChange, onBack,
+  onExport, onDownload, onSign, onFindReplace, editorMode, onModeChange,
 }: ToolbarProps) {
-  const [editingTitle, setEditingTitle] = useState(false)
-  const [titleValue, setTitleValue] = useState(documentTitle)
   const [showZoomMenu, setShowZoomMenu] = useState(false)
   const scalePercent = Math.round(scale * 100)
-
-  const saveTitle = async () => {
-    setEditingTitle(false)
-    if (titleValue.trim() && titleValue !== documentTitle && documentId) {
-      try {
-        await api.patch(`/documents/${documentId}`, { title: titleValue.trim() })
-      } catch { /* ignore */ }
-    }
-  }
 
   return (
     <div className="h-14 bg-white border-b border-gray-200 flex items-center px-3 gap-1 shrink-0 shadow-sm">
       <button
         onClick={onBack}
         className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
-        title="Back to dashboard"
+        title="Back to home"
       >
         <ArrowLeft size={18} />
       </button>
 
       <div className="h-6 w-px bg-gray-200 mx-1" />
 
-      {editingTitle ? (
-        <input
-          autoFocus
-          value={titleValue}
-          onChange={(e) => setTitleValue(e.target.value)}
-          onBlur={saveTitle}
-          onKeyDown={(e) => { if (e.key === 'Enter') saveTitle(); if (e.key === 'Escape') setEditingTitle(false) }}
-          className="text-sm font-medium text-gray-800 bg-gray-50 border border-gray-300 rounded px-2 py-1 max-w-[240px] outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100"
-        />
-      ) : (
-        <button
-          onClick={() => { setTitleValue(documentTitle); setEditingTitle(true) }}
-          className="text-sm font-medium text-gray-800 hover:text-gray-600 truncate max-w-[240px] px-2 py-1 rounded hover:bg-gray-50 transition-colors"
-          title="Click to rename"
-        >
-          {documentTitle}
-        </button>
-      )}
+      <span className="text-sm font-medium text-gray-800 truncate max-w-[240px] px-2 py-1">
+        {documentTitle}
+      </span>
 
       <div className="flex-1" />
 
@@ -105,25 +73,6 @@ export default function Toolbar({
       </div>
 
       <div className="flex-1" />
-
-      <div className="flex items-center gap-0.5">
-        <button
-          onClick={onUndo}
-          className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
-          title="Undo (Ctrl+Z)"
-        >
-          <Undo2 size={16} />
-        </button>
-        <button
-          onClick={onRedo}
-          className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
-          title="Redo (Ctrl+Y)"
-        >
-          <Redo2 size={16} />
-        </button>
-      </div>
-
-      <div className="h-6 w-px bg-gray-200 mx-1" />
 
       <div className="flex items-center gap-0.5">
         <button
@@ -194,18 +143,11 @@ export default function Toolbar({
         <PenTool size={16} />
       </button>
       <button
-        onClick={onSave}
+        onClick={onDownload}
         className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
-        title="Save version"
+        title="Download PDF"
       >
-        <Save size={16} />
-      </button>
-      <button
-        onClick={onShowHistory}
-        className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
-        title="Version history"
-      >
-        <History size={16} />
+        <Download size={16} />
       </button>
       <button
         onClick={onExport}

@@ -7,31 +7,27 @@ interface TextBlockOverlayProps {
   pageNumber: number
   pageHeight: number
   scale: number
-  documentId?: string
   onDocumentChanged?: () => void
   onError?: (message: string) => void
 }
 
-export default function TextBlockOverlay({ pageNumber, pageHeight, scale, documentId, onDocumentChanged, onError }: TextBlockOverlayProps) {
+export default function TextBlockOverlay({ pageNumber, pageHeight, scale, onDocumentChanged, onError }: TextBlockOverlayProps) {
   const analysis = useEditorStore((s) => s.getPageAnalysis(pageNumber))
   const selectedBlockId = useEditorStore((s) => s.selectedBlockId)
   const selectBlock = useEditorStore((s) => s.selectBlock)
   const analyzeDocument = useEditorStore((s) => s.analyzeDocument)
-  const docId = useEditorStore((s) => s.documentId)
   const { pdfRectToScreen } = useCoordinateTransform(scale, pageHeight)
 
   const [editingBlockId, setEditingBlockId] = useState<string | null>(null)
 
-  const effectiveDocId = documentId || docId
-
   const handleEditComplete = useCallback((changed: boolean) => {
     setEditingBlockId(null)
     selectBlock(null)
-    if (changed && effectiveDocId) {
-      analyzeDocument(effectiveDocId)
+    if (changed) {
+      analyzeDocument()
       onDocumentChanged?.()
     }
-  }, [effectiveDocId, analyzeDocument, selectBlock, onDocumentChanged])
+  }, [analyzeDocument, selectBlock, onDocumentChanged])
 
   if (!analysis) return null
 
@@ -48,7 +44,7 @@ export default function TextBlockOverlay({ pageNumber, pageHeight, scale, docume
         const isEditing = editingBlockId === block.id
         const isSelected = selectedBlockId === block.id
 
-        if (isEditing && effectiveDocId) {
+        if (isEditing) {
           return (
             <InlineTextEditor
               key={block.id}
@@ -56,7 +52,6 @@ export default function TextBlockOverlay({ pageNumber, pageHeight, scale, docume
               pageNumber={pageNumber}
               pageHeight={pageHeight}
               scale={scale}
-              documentId={effectiveDocId}
               onEditComplete={handleEditComplete}
               onError={onError}
             />

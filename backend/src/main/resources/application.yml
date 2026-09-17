@@ -1,8 +1,6 @@
 spring:
   application:
     name: pdf-platform
-  profiles:
-    active: ${SPRING_PROFILES_ACTIVE:dev}
   jackson:
     serialization:
       write-dates-as-timestamps: false
@@ -23,88 +21,12 @@ management:
     health:
       show-details: when-authorized
 
----
-spring:
-  config:
-    activate:
-      on-profile: dev
-
-  datasource:
-    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:pdfplatform}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
-    username: ${DB_USER:root}
-    password: ${DB_PASSWORD:root}
-    hikari:
-      maximum-pool-size: 10
-      minimum-idle: 2
-
-  jpa:
-    hibernate:
-      ddl-auto: validate
-    show-sql: false
-    properties:
-      hibernate:
-        dialect: org.hibernate.dialect.MySQLDialect
-        type:
-          preferred_uuid_jdbc_type: CHAR
-
-  flyway:
-    enabled: true
-    locations: classpath:db/migration
-    baseline-on-migrate: true
-
 app:
-  storage:
-    base-path: ${STORAGE_PATH:./storage}
-
-  jwt:
-    secret: ${JWT_SECRET:dev-secret-key-change-in-production-must-be-at-least-256-bits-long}
-    access-token-expiry: 900000
-    refresh-token-expiry: 2592000000
-
-  guest:
-    session-expiry-hours: 24
-    max-documents: 3
-    max-file-size-mb: 50
+  cors:
+    allowed-origins: ${CORS_ORIGINS:http://localhost:3000,http://localhost:3001,http://localhost:5173}
 
   upload:
     max-file-size-mb: 200
     max-pages: 2000
     allowed-types:
       - application/pdf
-
----
-spring:
-  config:
-    activate:
-      on-profile: prod
-
-  datasource:
-    url: jdbc:mysql://${DB_HOST}:${DB_PORT:3306}/${DB_NAME}?useSSL=true&serverTimezone=UTC
-    username: ${DB_USER}
-    password: ${DB_PASSWORD}
-    hikari:
-      maximum-pool-size: 20
-      minimum-idle: 5
-
-  jpa:
-    hibernate:
-      ddl-auto: validate
-    show-sql: false
-    properties:
-      hibernate:
-        dialect: org.hibernate.dialect.MySQLDialect
-        type:
-          preferred_uuid_jdbc_type: CHAR
-
-  flyway:
-    enabled: true
-    locations: classpath:db/migration
-
-app:
-  storage:
-    base-path: ${STORAGE_PATH:./storage}
-
-  jwt:
-    secret: ${JWT_SECRET}
-    access-token-expiry: 900000
-    refresh-token-expiry: 2592000000

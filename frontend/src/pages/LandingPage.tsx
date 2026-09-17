@@ -1,10 +1,9 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { useAuthStore } from '../stores/authStore'
 import UploadDropzone from '../components/UploadDropzone'
 import {
   FileText, FileEdit, FileDown, Droplets, Lock, Unlock, Hash, Upload,
-  Shield, Zap, Globe, ArrowRight, X, RotateCw, FileOutput, Palette,
+  Shield, Zap, Globe, X, RotateCw, FileOutput, Palette,
   Layers, AlignVerticalSpaceAround, Image, FileImage, Scissors, Merge,
   Crop, Maximize2, Wrench, AlignLeft, BookOpen, Grid3X3, EyeOff, ListOrdered,
   ClipboardList, GitCompareArrows, Shuffle, Trash2, PenTool, ScanLine,
@@ -93,7 +92,7 @@ const FEATURES = [
   {
     icon: Shield,
     title: 'Secure & Private',
-    description: 'Your files are processed securely. Documents are stored privately in your account.',
+    description: 'Your files stay in your browser. Nothing is stored on our servers.',
     color: 'text-emerald-500',
     bg: 'bg-emerald-50',
   },
@@ -108,7 +107,6 @@ const FEATURES = [
 
 export default function LandingPage() {
   const navigate = useNavigate()
-  const { isAuthenticated } = useAuthStore()
   const [showUpload, setShowUpload] = useState(false)
 
   const handleToolClick = (tool: { route: string | null }) => {
@@ -138,30 +136,13 @@ export default function LandingPage() {
               >
                 All Tools
               </Link>
-              {isAuthenticated ? (
-                <Link
-                  to="/dashboard"
-                  className="flex items-center gap-1.5 px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors"
-                >
-                  Go to Dashboard
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
-              ) : (
-                <>
-                  <Link
-                    to="/login"
-                    className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 transition-colors"
-                  >
-                    Log in
-                  </Link>
-                  <Link
-                    to="/register"
-                    className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors shadow-sm"
-                  >
-                    Sign up free
-                  </Link>
-                </>
-              )}
+              <button
+                onClick={() => setShowUpload(true)}
+                className="flex items-center gap-1.5 px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors"
+              >
+                <Upload className="h-4 w-4" />
+                Edit PDF
+              </button>
             </nav>
           </div>
         </div>
@@ -197,7 +178,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Tools Grid - Categorized like iLovePDF */}
+      {/* Tools Grid */}
       <section className="py-16 bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
@@ -279,9 +260,9 @@ export default function LandingPage() {
               </button>
             </div>
             <UploadDropzone
-              onUploadComplete={(doc) => {
+              onUploadComplete={() => {
                 setShowUpload(false)
-                navigate(`/editor/${doc.id}`)
+                navigate('/editor')
               }}
             />
           </div>

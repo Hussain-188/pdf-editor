@@ -2,20 +2,20 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import type { TextBlockData } from '../../stores/editorStore'
 import { useCoordinateTransform } from '../../hooks/useCoordinateTransform'
 import { mapPdfFontToCSS, isBoldFont, isItalicFont } from '../../lib/fontMapper'
-import api from '../../lib/api'
+import { sendPdfOperation } from '../../lib/pdfOperations'
+import { usePdfStore } from '../../stores/pdfStore'
 
 interface InlineTextEditorProps {
   block: TextBlockData
   pageNumber: number
   pageHeight: number
   scale: number
-  documentId: string
   onEditComplete: (changed: boolean) => void
   onError?: (message: string) => void
 }
 
 export default function InlineTextEditor({
-  block, pageNumber, pageHeight, scale, documentId, onEditComplete, onError,
+  block, pageNumber, pageHeight, scale, onEditComplete, onError,
 }: InlineTextEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null)
   const [saving, setSaving] = useState(false)
@@ -62,13 +62,17 @@ export default function InlineTextEditor({
     savingRef.current = true
     setSaving(true)
     try {
-      await api.post(`/documents/${documentId}/edit`, {
+      const editRequest = JSON.stringify({
         pageNumber,
         textBlockId: block.id,
         operation: 'TEXT_REPLACE',
         oldText: originalTextRef.current,
         newText,
       })
+      const newBytes = await sendPdfOperation('/editor/edit', (fd) => {
+        fd.append('editRequest', editRequest)
+      })
+      usePdfStore.getState().updatePdf(newBytes)
       onEditComplete(true)
     } catch (err: any) {
       const msg = err?.response?.data?.error || err?.message || 'Edit failed'
@@ -78,7 +82,7 @@ export default function InlineTextEditor({
       savingRef.current = false
       setSaving(false)
     }
-  }, [block.id, documentId, pageNumber, onEditComplete])
+  }, [block.id, pageNumber, onEditComplete, onError])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {

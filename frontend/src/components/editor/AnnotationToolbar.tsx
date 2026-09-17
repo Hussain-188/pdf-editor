@@ -4,6 +4,8 @@ import {
   Underline, Strikethrough, RectangleHorizontal, ImagePlus,
 } from 'lucide-react'
 import { useAnnotationStore, type AnnotationType } from '../../stores/annotationStore'
+import { sendPdfOperation } from '../../lib/pdfOperations'
+import { usePdfStore } from '../../stores/pdfStore'
 
 const tools: { type: AnnotationType; label: string; Icon: typeof Type }[] = [
   { type: 'textbox', label: 'Text', Icon: Type },
@@ -22,11 +24,10 @@ const strokeWidths = [1, 2, 3, 5]
 
 interface AnnotationToolbarProps {
   visible: boolean
-  documentId?: string
-  onImageInserted?: () => void
+  onPdfChanged?: () => void
 }
 
-export default function AnnotationToolbar({ visible, documentId, onImageInserted }: AnnotationToolbarProps) {
+export default function AnnotationToolbar({ visible, onPdfChanged }: AnnotationToolbarProps) {
   const activeTool = useAnnotationStore((s) => s.activeTool)
   const setActiveTool = useAnnotationStore((s) => s.setActiveTool)
   const activeColor = useAnnotationStore((s) => s.activeColor)
@@ -39,17 +40,20 @@ export default function AnnotationToolbar({ visible, documentId, onImageInserted
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (!file || !documentId) return
+    if (!file) return
     e.target.value = ''
 
-    const formData = new FormData()
-    formData.append('image', file)
-    const { default: api } = await import('../../lib/api')
     try {
-      await api.post(`/documents/${documentId}/pages/1/add-image`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
+      const newBytes = await sendPdfOperation('/editor/add-image', (fd) => {
+        fd.append('image', file)
+        fd.append('pageNumber', '1')
+        fd.append('x', '100')
+        fd.append('y', '100')
+        fd.append('width', '0')
+        fd.append('height', '0')
       })
-      onImageInserted?.()
+      usePdfStore.getState().updatePdf(newBytes)
+      onPdfChanged?.()
     } catch { /* ignore */ }
   }
 

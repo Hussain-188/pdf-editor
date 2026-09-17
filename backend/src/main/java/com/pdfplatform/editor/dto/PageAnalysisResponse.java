@@ -1,4 +1,4 @@
-package com.pdfplatform.document.dto;
+package com.pdfplatform.editor.dto;
 
 import java.util.List;
 

@@ -8,16 +8,12 @@ import { getDocument } from 'pdfjs-dist'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 import '../lib/pdfWorker'
 import api from '../lib/api'
-import { useAuthStore } from '../stores/authStore'
-import { useGuestStore } from '../stores/guestStore'
 
 type SignMode = 'draw' | 'type' | 'upload'
 
 export default function SignPdfPage() {
-  const { isAuthenticated } = useAuthStore()
-  const { initSession } = useGuestStore()
-
   const [file, setFile] = useState<File | null>(null)
+  const [fileBytes, setFileBytes] = useState<Uint8Array | null>(null)
   const [pdfDoc, setPdfDoc] = useState<PDFDocumentProxy | null>(null)
   const [pageUrls, setPageUrls] = useState<string[]>([])
   const [selectedPage, setSelectedPage] = useState(1)
@@ -38,6 +34,7 @@ export default function SignPdfPage() {
   const loadPdf = useCallback(async (pdfFile: File) => {
     try {
       const arrayBuffer = await pdfFile.arrayBuffer()
+      setFileBytes(new Uint8Array(arrayBuffer))
       const doc = await getDocument({ data: arrayBuffer }).promise
       setPdfDoc(doc)
 
@@ -132,46 +129,33 @@ export default function SignPdfPage() {
   }, [typedName, signMode, generateTypedSignature])
 
   const handleProcess = async () => {
-    if (!file || !signatureDataUrl) return
+    if (!fileBytes || !signatureDataUrl) return
     setProcessing(true)
     setError('')
     setDone(false)
 
     try {
-      const token = isAuthenticated ? undefined : await initSession()
-      const uploadFormData = new FormData()
-      uploadFormData.append('file', file)
-      if (token) uploadFormData.append('guestToken', token)
+      const sigBlob = await fetch(signatureDataUrl).then((r) => r.blob())
 
-      const { data: doc } = await api.post('/documents/upload', uploadFormData, {
+      const formData = new FormData()
+      formData.append('file', new Blob([fileBytes.buffer as ArrayBuffer], { type: 'application/pdf' }), file?.name || 'document.pdf')
+      formData.append('image', sigBlob, 'signature.png')
+      formData.append('pageNumber', String(selectedPage))
+      formData.append('x', String(sigX))
+      formData.append('y', String(sigY))
+      formData.append('width', '200')
+      formData.append('height', '60')
+
+      const { data } = await api.post('/editor/add-image', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
+        responseType: 'arraybuffer',
       })
 
-      const sigBlob = await fetch(signatureDataUrl).then((r) => r.blob())
-      const sigFormData = new FormData()
-      sigFormData.append('image', sigBlob, 'signature.png')
-      if (token) sigFormData.append('guestToken', token)
-
-      const params = new URLSearchParams()
-      params.set('x', String(sigX))
-      params.set('y', String(sigY))
-      params.set('width', '200')
-      params.set('height', '60')
-      if (token) params.set('guestToken', token)
-
-      await api.post(
-        `/documents/${doc.id}/pages/${selectedPage}/add-image?${params.toString()}`,
-        sigFormData,
-        { headers: { 'Content-Type': 'multipart/form-data' } }
-      )
-
-      const { data: urlData } = await api.get(`/documents/${doc.id}/url${token ? `?guestToken=${token}` : ''}`)
-      const pdfResponse = await fetch(urlData.url)
-      const blob = await pdfResponse.blob()
+      const blob = new Blob([data], { type: 'application/pdf' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = file.name.replace('.pdf', '_signed.pdf')
+      a.download = (file?.name || 'document.pdf').replace('.pdf', '_signed.pdf')
       a.click()
       URL.revokeObjectURL(url)
       setDone(true)

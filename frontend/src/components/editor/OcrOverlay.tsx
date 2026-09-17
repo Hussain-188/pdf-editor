@@ -4,10 +4,9 @@ interface OcrOverlayProps {
   pageNumber: number
   pageHeight: number
   scale: number
-  documentId: string
 }
 
-export default function OcrOverlay({ pageNumber, pageHeight, scale, documentId }: OcrOverlayProps) {
+export default function OcrOverlay({ pageNumber, pageHeight, scale }: OcrOverlayProps) {
   const result = useOcrStore((s) => s.getPageResult(pageNumber))
   const ocrPage = useOcrStore((s) => s.ocrPage)
   const loading = useOcrStore((s) => s.loading)
@@ -16,7 +15,7 @@ export default function OcrOverlay({ pageNumber, pageHeight, scale, documentId }
     return (
       <div className="absolute top-2 right-2 z-10">
         <button
-          onClick={() => ocrPage(documentId, pageNumber)}
+          onClick={() => ocrPage(pageNumber)}
           disabled={loading}
           className="px-2 py-1 text-[10px] bg-amber-100 text-amber-800 rounded border border-amber-300 hover:bg-amber-200 disabled:opacity-50"
         >

@@ -1,6 +1,8 @@
 import { useState, useCallback } from 'react'
 import { X, Search, Replace, Loader2 } from 'lucide-react'
 import api from '../../lib/api'
+import { usePdfStore } from '../../stores/pdfStore'
+import { sendPdfOperation } from '../../lib/pdfOperations'
 
 interface FindResult {
   pageNumber: number
@@ -11,14 +13,12 @@ interface FindResult {
 }
 
 interface FindReplaceDialogProps {
-  documentId: string
   open: boolean
   onClose: () => void
   onReplaced: () => void
 }
 
 export default function FindReplaceDialog({
-  documentId,
   open,
   onClose,
   onReplaced,
@@ -34,31 +34,39 @@ export default function FindReplaceDialog({
 
   const handleFind = useCallback(async () => {
     if (!searchText.trim()) return
+    const { pdfBytes } = usePdfStore.getState()
+    if (!pdfBytes) return
+
     setSearching(true)
     setError('')
     setReplaceCount(null)
     try {
-      const { data } = await api.post(`/documents/${documentId}/find`, {
-        searchText: searchText.trim(),
-        caseSensitive,
+      const formData = new FormData()
+      formData.append('file', new Blob([pdfBytes.buffer as ArrayBuffer], { type: 'application/pdf' }), 'document.pdf')
+      formData.append('searchText', searchText.trim())
+      formData.append('caseSensitive', String(caseSensitive))
+
+      const { data } = await api.post('/editor/find', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
       })
       setResults(data)
     } catch (err: any) {
       setError(err.response?.data?.error || 'Search failed')
     }
     setSearching(false)
-  }, [documentId, searchText, caseSensitive])
+  }, [searchText, caseSensitive])
 
   const handleReplaceAll = useCallback(async () => {
     if (!searchText.trim()) return
     setReplacing(true)
     setError('')
     try {
-      await api.post(`/documents/${documentId}/replace-all`, {
-        searchText: searchText.trim(),
-        replaceText,
-        caseSensitive,
+      const newBytes = await sendPdfOperation('/editor/replace-all', (fd) => {
+        fd.append('searchText', searchText.trim())
+        fd.append('replaceText', replaceText)
+        fd.append('caseSensitive', String(caseSensitive))
       })
+      usePdfStore.getState().updatePdf(newBytes)
       setReplaceCount(results.length)
       setResults([])
       onReplaced()
@@ -66,7 +74,7 @@ export default function FindReplaceDialog({
       setError(err.response?.data?.error || 'Replace failed')
     }
     setReplacing(false)
-  }, [documentId, searchText, replaceText, caseSensitive, results.length, onReplaced])
+  }, [searchText, replaceText, caseSensitive, results.length, onReplaced])
 
   if (!open) return null
 
@@ -74,10 +82,7 @@ export default function FindReplaceDialog({
     <div className="fixed top-20 right-6 z-50 w-80 bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden">
       <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-200">
         <h3 className="text-sm font-semibold text-gray-800">Find & Replace</h3>
-        <button
-          onClick={onClose}
-          className="p-1 hover:bg-gray-200 rounded transition-colors"
-        >
+        <button onClick={onClose} className="p-1 hover:bg-gray-200 rounded transition-colors">
           <X className="w-4 h-4 text-gray-500" />
         </button>
       </div>
@@ -125,9 +130,7 @@ export default function FindReplaceDialog({
           Case sensitive
         </label>
 
-        {error && (
-          <div className="text-xs text-red-600 bg-red-50 p-2 rounded-lg">{error}</div>
-        )}
+        {error && <div className="text-xs text-red-600 bg-red-50 p-2 rounded-lg">{error}</div>}
 
         {results.length > 0 && (
           <div className="text-xs text-gray-600 bg-blue-50 p-2 rounded-lg">
@@ -145,10 +148,7 @@ export default function FindReplaceDialog({
         {results.length > 0 && (
           <div className="max-h-32 overflow-y-auto border border-gray-200 rounded-lg">
             {results.map((r, i) => (
-              <div
-                key={i}
-                className="px-3 py-2 text-xs border-b border-gray-100 last:border-b-0 hover:bg-gray-50"
-              >
+              <div key={i} className="px-3 py-2 text-xs border-b border-gray-100 last:border-b-0 hover:bg-gray-50">
                 <span className="text-gray-400">Page {r.pageNumber}:</span>{' '}
                 <span className="text-gray-800">{r.text.slice(0, 60)}{r.text.length > 60 ? '...' : ''}</span>
               </div>
@@ -163,15 +163,9 @@ export default function FindReplaceDialog({
             className="w-full py-2 text-sm font-medium bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
           >
             {replacing ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Replacing...
-              </>
+              <><Loader2 className="w-4 h-4 animate-spin" />Replacing...</>
             ) : (
-              <>
-                <Replace className="w-4 h-4" />
-                Replace All ({results.length})
-              </>
+              <><Replace className="w-4 h-4" />Replace All ({results.length})</>
             )}
           </button>
         )}

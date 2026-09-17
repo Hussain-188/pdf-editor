@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { Download, X, FileText, Image, Loader2 } from 'lucide-react'
+import { usePdfStore } from '../../stores/pdfStore'
+import { downloadPdf } from '../../lib/pdfOperations'
 import api from '../../lib/api'
 
 interface ExportDialogProps {
-  documentId: string
   pageCount: number
   open: boolean
   onClose: () => void
@@ -17,59 +18,39 @@ const FORMAT_OPTIONS: { value: ExportFormat; label: string; icon: React.ReactNod
   { value: 'jpg', label: 'JPG', icon: <Image className="w-5 h-5" />, desc: 'Compressed image' },
 ]
 
-export default function ExportDialog({ documentId, pageCount, open, onClose }: ExportDialogProps) {
+export default function ExportDialog({ open, onClose }: ExportDialogProps) {
   const [format, setFormat] = useState<ExportFormat>('pdf')
-  const [pageSelection, setPageSelection] = useState<'all' | 'custom'>('all')
-  const [customPages, setCustomPages] = useState('')
   const [dpi, setDpi] = useState(150)
   const [exporting, setExporting] = useState(false)
 
   if (!open) return null
 
-  const parsePageRange = (input: string): number[] => {
-    const pages = new Set<number>()
-    input.split(',').forEach((part) => {
-      const range = part.trim().split('-')
-      if (range.length === 2) {
-        const start = parseInt(range[0])
-        const end = parseInt(range[1])
-        if (!isNaN(start) && !isNaN(end)) {
-          for (let i = start; i <= Math.min(end, pageCount); i++) pages.add(i)
-        }
-      } else {
-        const p = parseInt(range[0])
-        if (!isNaN(p) && p >= 1 && p <= pageCount) pages.add(p)
-      }
-    })
-    return Array.from(pages).sort((a, b) => a - b)
-  }
-
   const handleExport = async () => {
     setExporting(true)
     try {
-      const pages = pageSelection === 'custom' ? parsePageRange(customPages) : undefined
+      const { pdfBytes, fileName } = usePdfStore.getState()
+      if (!pdfBytes) return
 
-      let url: string
       if (format === 'pdf') {
-        const { data } = await api.post(`/documents/${documentId}/export`, {
-          format: 'pdf',
-          pageRange: pages,
-          flattenAnnotations: true,
-        })
-        url = data.url
+        downloadPdf(pdfBytes, fileName || 'document.pdf')
       } else {
-        const { data } = await api.post(`/documents/${documentId}/export/images`, {
-          format,
-          dpi,
-          pages,
-        })
-        url = data.url
-      }
+        const formData = new FormData()
+        formData.append('file', new Blob([pdfBytes.buffer as ArrayBuffer], { type: 'application/pdf' }), 'document.pdf')
+        formData.append('format', format)
+        formData.append('dpi', String(dpi))
 
-      const a = document.createElement('a')
-      a.href = url
-      a.download = format === 'pdf' ? 'document.pdf' : 'pages.zip'
-      a.click()
+        const response = await api.post('/tools/pdf-to-images', formData, {
+          responseType: 'blob',
+          headers: { 'Content-Type': 'multipart/form-data' },
+        })
+
+        const url = URL.createObjectURL(response.data)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = 'pages.zip'
+        a.click()
+        URL.revokeObjectURL(url)
+      }
       onClose()
     } catch { /* ignore */ }
     setExporting(false)
@@ -78,7 +59,6 @@ export default function ExportDialog({ documentId, pageCount, open, onClose }: E
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-xl w-[420px] animate-scale-in" onClick={(e) => e.stopPropagation()}>
-        {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <div className="flex items-center gap-2">
             <Download className="w-5 h-5 text-primary-600" />
@@ -90,7 +70,6 @@ export default function ExportDialog({ documentId, pageCount, open, onClose }: E
         </div>
 
         <div className="p-6 space-y-5">
-          {/* Format */}
           <div>
             <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">Format</label>
             <div className="grid grid-cols-3 gap-2">
@@ -111,41 +90,6 @@ export default function ExportDialog({ documentId, pageCount, open, onClose }: E
             </div>
           </div>
 
-          {/* Pages */}
-          <div>
-            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">Pages</label>
-            <div className="flex gap-3 mb-2">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  checked={pageSelection === 'all'}
-                  onChange={() => setPageSelection('all')}
-                  className="w-4 h-4 text-primary-600 focus:ring-primary-500"
-                />
-                <span className="text-sm text-gray-700">All pages ({pageCount})</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  checked={pageSelection === 'custom'}
-                  onChange={() => setPageSelection('custom')}
-                  className="w-4 h-4 text-primary-600 focus:ring-primary-500"
-                />
-                <span className="text-sm text-gray-700">Custom</span>
-              </label>
-            </div>
-            {pageSelection === 'custom' && (
-              <input
-                type="text"
-                value={customPages}
-                onChange={(e) => setCustomPages(e.target.value)}
-                placeholder="e.g. 1-3, 5, 8"
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
-              />
-            )}
-          </div>
-
-          {/* DPI (images only) */}
           {format !== 'pdf' && (
             <div>
               <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">Quality</label>
@@ -173,7 +117,6 @@ export default function ExportDialog({ documentId, pageCount, open, onClose }: E
           )}
         </div>
 
-        {/* Footer */}
         <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50 rounded-b-2xl">
           <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-200 rounded-lg transition-colors">
             Cancel

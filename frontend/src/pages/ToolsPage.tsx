@@ -9,7 +9,6 @@ import {
   ClipboardList, GitCompareArrows, Shuffle, Trash2, PenTool,
   ScanLine, BookmarkIcon, FileX2, ImageDown,
 } from 'lucide-react'
-import { useAuthStore } from '../stores/authStore'
 import api from '../lib/api'
 
 interface Tool {
@@ -531,7 +530,7 @@ const toolCategories: ToolCategory[] = [
         color: 'text-blue-600',
         bgColor: 'bg-blue-50 hover:bg-blue-100 border-blue-200',
         fields: [],
-        dedicatedPage: '/dashboard',
+        dedicatedPage: '/',
       },
       ...allTools.filter((t) => ['sign', 'redact', 'fill-form'].includes(t.id)),
     ],
@@ -561,8 +560,6 @@ const toolCategories: ToolCategory[] = [
 export default function ToolsPage() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
-  const { user, isAuthenticated } = useAuthStore()
-
   const [activeTool, setActiveTool] = useState<Tool | null>(null)
   const [file, setFile] = useState<File | null>(null)
   const [params, setParams] = useState<Record<string, string | number | boolean>>({})
@@ -662,27 +659,13 @@ export default function ToolsPage() {
             PDF Editor
           </Link>
           <nav className="hidden sm:flex items-center gap-1">
-            {isAuthenticated && (
-              <Link to="/dashboard" className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 rounded-md hover:bg-gray-100">
-                Dashboard
-              </Link>
-            )}
+            <Link to="/" className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 rounded-md hover:bg-gray-100">
+              Home
+            </Link>
             <span className="px-3 py-1.5 text-sm text-primary-600 font-medium bg-primary-50 rounded-md">
               Tools
             </span>
           </nav>
-        </div>
-        <div className="flex items-center gap-3">
-          {isAuthenticated ? (
-            <span className="text-sm text-gray-600">{user?.displayName}</span>
-          ) : (
-            <>
-              <Link to="/login" className="text-sm text-gray-600 hover:text-gray-900">Log in</Link>
-              <Link to="/register" className="text-sm bg-primary-600 text-white px-4 py-1.5 rounded-lg hover:bg-primary-700">
-                Sign up
-              </Link>
-            </>
-          )}
         </div>
       </div>
     </header>

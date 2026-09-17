@@ -1,12 +1,7 @@
-import { useEffect, lazy, Suspense } from 'react'
+import { lazy, Suspense } from 'react'
 import { Routes, Route } from 'react-router-dom'
-import { useAuthStore } from './stores/authStore'
-import ProtectedRoute from './components/ProtectedRoute'
 import LandingPage from './pages/LandingPage'
 
-const LoginPage = lazy(() => import('./pages/LoginPage'))
-const RegisterPage = lazy(() => import('./pages/RegisterPage'))
-const DashboardPage = lazy(() => import('./pages/DashboardPage'))
 const EditorPage = lazy(() => import('./pages/EditorPage'))
 const ToolsPage = lazy(() => import('./pages/ToolsPage'))
 const MergePage = lazy(() => import('./pages/MergePage'))
@@ -30,27 +25,11 @@ function PageLoader() {
 }
 
 export default function App() {
-  const fetchUser = useAuthStore((s) => s.fetchUser)
-
-  useEffect(() => {
-    fetchUser()
-  }, [fetchUser])
-
   return (
     <Suspense fallback={<PageLoader />}>
       <Routes>
         <Route path="/" element={<LandingPage />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/register" element={<RegisterPage />} />
-        <Route
-          path="/dashboard"
-          element={
-            <ProtectedRoute>
-              <DashboardPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route path="/editor/:id" element={<EditorPage />} />
+        <Route path="/editor" element={<EditorPage />} />
         <Route path="/tools" element={<ToolsPage />} />
         <Route path="/merge" element={<MergePage />} />
         <Route path="/split" element={<SplitPage />} />

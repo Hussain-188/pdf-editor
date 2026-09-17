@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import api from '../lib/api'
+import { usePdfStore } from './pdfStore'
 
 export interface TextRunData {
   text: string
@@ -43,32 +44,38 @@ export interface PageAnalysis {
 }
 
 interface EditorState {
-  documentId: string | null
   pageAnalyses: Map<number, PageAnalysis>
   selectedBlockId: string | null
   analysisLoading: boolean
 
-  setDocumentId: (id: string) => void
-  analyzeDocument: (id: string) => Promise<void>
-  analyzePage: (id: string, pageNumber: number) => Promise<void>
+  analyzeDocument: () => Promise<void>
+  analyzePage: (pageNumber: number) => Promise<void>
   selectBlock: (blockId: string | null) => void
   getPageAnalysis: (pageNumber: number) => PageAnalysis | undefined
-  undo: () => Promise<void>
-  redo: () => Promise<void>
+  clearAnalyses: () => void
+}
+
+function makePdfFormData(): FormData | null {
+  const { pdfBytes } = usePdfStore.getState()
+  if (!pdfBytes) return null
+  const formData = new FormData()
+  formData.append('file', new Blob([pdfBytes.buffer as ArrayBuffer], { type: 'application/pdf' }), 'document.pdf')
+  return formData
 }
 
 export const useEditorStore = create<EditorState>((set, get) => ({
-  documentId: null,
   pageAnalyses: new Map(),
   selectedBlockId: null,
   analysisLoading: false,
 
-  setDocumentId: (id) => set({ documentId: id }),
-
-  analyzeDocument: async (id) => {
+  analyzeDocument: async () => {
+    const formData = makePdfFormData()
+    if (!formData) return
     set({ analysisLoading: true })
     try {
-      const { data } = await api.post(`/documents/${id}/analyze`)
+      const { data } = await api.post('/editor/analyze', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
       const analyses = new Map<number, PageAnalysis>()
       for (const page of data) {
         analyses.set(page.pageNumber, page)
@@ -79,9 +86,14 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     }
   },
 
-  analyzePage: async (id, pageNumber) => {
+  analyzePage: async (pageNumber) => {
+    const formData = makePdfFormData()
+    if (!formData) return
+    formData.append('pageNumber', String(pageNumber))
     try {
-      const { data } = await api.get(`/documents/${id}/pages/${pageNumber}/analysis`)
+      const { data } = await api.post('/editor/analyze-page', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
       const analyses = new Map(get().pageAnalyses)
       analyses.set(pageNumber, data)
       set({ pageAnalyses: analyses })
@@ -92,15 +104,5 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   getPageAnalysis: (pageNumber) => get().pageAnalyses.get(pageNumber),
 
-  undo: async () => {
-    const id = get().documentId
-    if (!id) return
-    await api.post(`/documents/${id}/undo`)
-  },
-
-  redo: async () => {
-    const id = get().documentId
-    if (!id) return
-    await api.post(`/documents/${id}/redo`)
-  },
+  clearAnalyses: () => set({ pageAnalyses: new Map(), selectedBlockId: null }),
 }))

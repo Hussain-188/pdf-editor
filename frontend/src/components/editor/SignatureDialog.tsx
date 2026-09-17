@@ -1,11 +1,11 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { X, Pencil, Type, Upload, Loader2 } from 'lucide-react'
-import api from '../../lib/api'
+import { sendPdfOperation } from '../../lib/pdfOperations'
+import { usePdfStore } from '../../stores/pdfStore'
 
 type SignatureMode = 'draw' | 'type' | 'upload'
 
 interface SignatureDialogProps {
-  documentId: string
   pageNumber: number
   open: boolean
   onClose: () => void
@@ -13,7 +13,6 @@ interface SignatureDialogProps {
 }
 
 export default function SignatureDialog({
-  documentId,
   pageNumber,
   open,
   onClose,
@@ -115,19 +114,16 @@ export default function SignatureDialog({
     if (!blob) return
 
     setPlacing(true)
-    const formData = new FormData()
-    formData.append('image', blob, 'signature.png')
-    formData.append('x', '100')
-    formData.append('y', '100')
-    formData.append('width', '200')
-    formData.append('height', '60')
-
     try {
-      await api.post(
-        `/documents/${documentId}/pages/${pageNumber}/add-image`,
-        formData,
-        { headers: { 'Content-Type': 'multipart/form-data' } }
-      )
+      const newBytes = await sendPdfOperation('/editor/add-image', (fd) => {
+        fd.append('image', blob, 'signature.png')
+        fd.append('pageNumber', String(pageNumber))
+        fd.append('x', '100')
+        fd.append('y', '100')
+        fd.append('width', '200')
+        fd.append('height', '60')
+      })
+      usePdfStore.getState().updatePdf(newBytes)
       onSigned()
       onClose()
     } catch { /* ignore */ }

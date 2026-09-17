@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react'
 import { Type, Palette, CheckCircle2, AlertTriangle, X } from 'lucide-react'
 import type { TextBlockData } from '../../stores/editorStore'
-import api from '../../lib/api'
+import { sendPdfOperation } from '../../lib/pdfOperations'
+import { usePdfStore } from '../../stores/pdfStore'
 
 interface PropertiesPanelProps {
   block: TextBlockData
-  documentId: string
   pageNumber: number
   onUpdate: () => void
   onClose: () => void
@@ -16,7 +16,7 @@ const PRESET_COLORS = [
   '#CA8A04', '#16A34A', '#2563EB', '#7C3AED',
 ]
 
-export default function PropertiesPanel({ block, documentId, pageNumber, onUpdate, onClose }: PropertiesPanelProps) {
+export default function PropertiesPanel({ block, pageNumber, onUpdate, onClose }: PropertiesPanelProps) {
   const [fontSize, setFontSize] = useState(block.fontSize)
   const [color, setColor] = useState(rgbToHex(block.color))
 
@@ -29,13 +29,17 @@ export default function PropertiesPanel({ block, documentId, pageNumber, onUpdat
     if (newSize < 4 || newSize > 144) return
     setFontSize(newSize)
     try {
-      await api.post(`/documents/${documentId}/edit`, {
+      const editRequest = JSON.stringify({
         pageNumber,
         textBlockId: block.id,
         operation: 'FONT_SIZE_CHANGE',
         oldText: block.text,
         fontSize: newSize,
       })
+      const newBytes = await sendPdfOperation('/editor/edit', (fd) => {
+        fd.append('editRequest', editRequest)
+      })
+      usePdfStore.getState().updatePdf(newBytes)
       onUpdate()
     } catch { /* ignore */ }
   }
@@ -44,13 +48,17 @@ export default function PropertiesPanel({ block, documentId, pageNumber, onUpdat
     setColor(hexColor)
     const rgb = hexToRgb(hexColor)
     try {
-      await api.post(`/documents/${documentId}/edit`, {
+      const editRequest = JSON.stringify({
         pageNumber,
         textBlockId: block.id,
         operation: 'TEXT_COLOR_CHANGE',
         oldText: block.text,
         color: rgb,
       })
+      const newBytes = await sendPdfOperation('/editor/edit', (fd) => {
+        fd.append('editRequest', editRequest)
+      })
+      usePdfStore.getState().updatePdf(newBytes)
       onUpdate()
     } catch { /* ignore */ }
   }

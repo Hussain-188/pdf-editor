@@ -9,13 +9,12 @@ interface PageRendererProps {
   scale: number
   pageNumber: number
   showOverlay?: boolean
-  documentId?: string
   onRendered?: () => void
   onDocumentChanged?: () => void
   onError?: (message: string) => void
 }
 
-export default function PageRenderer({ page, scale, pageNumber, showOverlay = false, documentId, onRendered, onDocumentChanged, onError }: PageRendererProps) {
+export default function PageRenderer({ page, scale, pageNumber, showOverlay = false, onRendered, onDocumentChanged, onError }: PageRendererProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const textLayerRef = useRef<HTMLDivElement>(null)
   const renderTaskRef = useRef<any>(null)
@@ -98,19 +97,15 @@ export default function PageRenderer({ page, scale, pageNumber, showOverlay = fa
           pageNumber={pageNumber}
           pageHeight={page.getViewport({ scale: 1 }).height}
           scale={scale}
-          documentId={documentId}
           onDocumentChanged={onDocumentChanged}
           onError={onError}
         />
       )}
-      {documentId && (
-        <OcrOverlay
-          pageNumber={pageNumber}
-          pageHeight={page.getViewport({ scale: 1 }).height}
-          scale={scale}
-          documentId={documentId}
-        />
-      )}
+      <OcrOverlay
+        pageNumber={pageNumber}
+        pageHeight={page.getViewport({ scale: 1 }).height}
+        scale={scale}
+      />
       <AnnotationLayer
         pageNumber={pageNumber}
         pageHeight={page.getViewport({ scale: 1 }).height}

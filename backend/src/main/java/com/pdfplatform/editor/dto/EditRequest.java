@@ -1,4 +1,4 @@
-package com.pdfplatform.document.dto;
+package com.pdfplatform.editor.dto;
 
 public record EditRequest(
         int pageNumber,

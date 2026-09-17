@@ -1,9 +1,10 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { getDocument } from 'pdfjs-dist'
 import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist'
 import '../lib/pdfWorker'
-import api from '../lib/api'
+import { usePdfStore } from '../stores/pdfStore'
+import { sendPdfOperation, downloadPdf } from '../lib/pdfOperations'
 import { useViewport } from '../hooks/useViewport'
 import { useEditorStore } from '../stores/editorStore'
 import { useAnnotationStore } from '../stores/annotationStore'
@@ -12,31 +13,30 @@ import AnnotationToolbar from '../components/editor/AnnotationToolbar'
 import PageRenderer from '../components/editor/PageRenderer'
 import PagePanel from '../components/editor/PagePanel'
 import PropertiesPanel from '../components/editor/PropertiesPanel'
-import VersionHistoryPanel from '../components/editor/VersionHistoryPanel'
 import ExportDialog from '../components/editor/ExportDialog'
 import FindReplaceDialog from '../components/editor/FindReplaceDialog'
 import SignatureDialog from '../components/editor/SignatureDialog'
+import { Upload } from 'lucide-react'
 
 export default function EditorPage() {
-  const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { viewport, zoomIn, zoomOut, setScale } = useViewport(1.0)
+  const pdfBytes = usePdfStore((s) => s.pdfBytes)
+  const fileName = usePdfStore((s) => s.fileName)
+  const updatePdf = usePdfStore((s) => s.updatePdf)
+  const setPdf = usePdfStore((s) => s.setPdf)
   const analyzeDocument = useEditorStore((s) => s.analyzeDocument)
   const analysisLoading = useEditorStore((s) => s.analysisLoading)
   const selectedBlockId = useEditorStore((s) => s.selectedBlockId)
   const pageAnalyses = useEditorStore((s) => s.pageAnalyses)
   const selectBlock = useEditorStore((s) => s.selectBlock)
-  const undo = useEditorStore((s) => s.undo)
-  const redo = useEditorStore((s) => s.redo)
-  const setDocumentId = useEditorStore((s) => s.setDocumentId)
-  const loadAnnotations = useAnnotationStore((s) => s.loadAnnotations)
+  const clearAnalyses = useEditorStore((s) => s.clearAnalyses)
   const clearAnnotations = useAnnotationStore((s) => s.clearAnnotations)
   const setActiveTool = useAnnotationStore((s) => s.setActiveTool)
 
   const [pdfDoc, setPdfDoc] = useState<PDFDocumentProxy | null>(null)
   const [pages, setPages] = useState<PDFPageProxy[]>([])
   const [currentPage, setCurrentPage] = useState(1)
-  const [docTitle, setDocTitle] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [editorMode, setEditorMode] = useState<EditorMode>('edit')
@@ -44,15 +44,14 @@ export default function EditorPage() {
   useEffect(() => {
     if (editorMode !== 'annotate') setActiveTool(null)
   }, [editorMode, setActiveTool])
-  const [showVersionPanel, setShowVersionPanel] = useState(false)
+
   const [showExportDialog, setShowExportDialog] = useState(false)
   const [showFindReplace, setShowFindReplace] = useState(false)
   const [showSignature, setShowSignature] = useState(false)
   const [thumbnailUrls, setThumbnailUrls] = useState<Map<number, string>>(new Map())
-  const [saving, setSaving] = useState(false)
   const [operationError, setOperationError] = useState<string | null>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
-  const autoSaveTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const selectedBlock = useMemo(() => {
     if (!selectedBlockId) return null
@@ -62,23 +61,6 @@ export default function EditorPage() {
     }
     return null
   }, [selectedBlockId, pageAnalyses])
-
-  useEffect(() => {
-    if (!id) return
-    setDocumentId(id)
-    loadDocument(id)
-    loadAnnotations(id)
-
-    autoSaveTimerRef.current = setInterval(() => {
-      api.post(`/documents/${id}/autosave`).catch(() => {})
-    }, 5 * 60 * 1000)
-
-    return () => {
-      pdfDoc?.cleanup()
-      clearAnnotations()
-      if (autoSaveTimerRef.current) clearInterval(autoSaveTimerRef.current)
-    }
-  }, [id])
 
   const generateThumbnails = useCallback(async (doc: PDFDocumentProxy) => {
     const newThumbnails = new Map<number, string>()
@@ -94,46 +76,9 @@ export default function EditorPage() {
     setThumbnailUrls(newThumbnails)
   }, [])
 
-  const loadDocument = async (docId: string) => {
+  const loadFromBytes = useCallback(async (bytes: Uint8Array) => {
     try {
-      const { data: docInfo } = await api.get(`/documents/${docId}`)
-      setDocTitle(docInfo.title)
-
-      const { data: urlData } = await api.get(`/documents/${docId}/url`)
-      const pdfResponse = await fetch(urlData.url, { cache: 'no-store' })
-      if (!pdfResponse.ok) throw new Error('Failed to download PDF')
-      const pdfData = await pdfResponse.arrayBuffer()
-      const doc = await getDocument({ data: pdfData }).promise
-      setPdfDoc(doc)
-
-      const loadedPages: PDFPageProxy[] = []
-      for (let i = 1; i <= doc.numPages; i++) {
-        const page = await doc.getPage(i)
-        loadedPages.push(page)
-      }
-      setPages(loadedPages)
-      setLoading(false)
-
-      generateThumbnails(doc)
-      analyzeDocument(docId)
-    } catch (err: any) {
-      setError(err.response?.data?.error || err.message || 'Failed to load document')
-      setLoading(false)
-    }
-  }
-
-  const reloadDocument = useCallback(async () => {
-    if (!id) return
-    try {
-      const { data: docInfo } = await api.get(`/documents/${id}`)
-      setDocTitle(docInfo.title)
-
-      const { data: urlData } = await api.get(`/documents/${id}/url`)
-      pdfDoc?.cleanup()
-      const pdfResponse = await fetch(urlData.url, { cache: 'no-store' })
-      if (!pdfResponse.ok) throw new Error('Failed to download PDF')
-      const pdfData = await pdfResponse.arrayBuffer()
-      const doc = await getDocument({ data: pdfData }).promise
+      const doc = await getDocument({ data: bytes.buffer.slice(0) as ArrayBuffer }).promise
       setPdfDoc(doc)
 
       const loadedPages: PDFPageProxy[] = []
@@ -141,51 +86,108 @@ export default function EditorPage() {
         loadedPages.push(await doc.getPage(i))
       }
       setPages(loadedPages)
-      generateThumbnails(doc)
-    } catch { /* ignore reload errors */ }
-  }, [id, pdfDoc, generateThumbnails])
+      setLoading(false)
 
-  const handlePageAction = useCallback(async (action: () => Promise<any>) => {
+      generateThumbnails(doc)
+      analyzeDocument()
+    } catch (err: any) {
+      setError(err.message || 'Failed to load PDF')
+      setLoading(false)
+    }
+  }, [generateThumbnails, analyzeDocument])
+
+  useEffect(() => {
+    if (!pdfBytes) {
+      setLoading(false)
+      return
+    }
+    loadFromBytes(pdfBytes)
+
+    return () => {
+      pdfDoc?.cleanup()
+      clearAnnotations()
+      clearAnalyses()
+    }
+  }, [])
+
+  const reloadFromBytes = useCallback(async (bytes: Uint8Array) => {
+    pdfDoc?.cleanup()
+    const doc = await getDocument({ data: bytes.buffer.slice(0) as ArrayBuffer }).promise
+    setPdfDoc(doc)
+
+    const loadedPages: PDFPageProxy[] = []
+    for (let i = 1; i <= doc.numPages; i++) {
+      loadedPages.push(await doc.getPage(i))
+    }
+    setPages(loadedPages)
+    generateThumbnails(doc)
+    analyzeDocument()
+  }, [pdfDoc, generateThumbnails, analyzeDocument])
+
+  const handlePageAction = useCallback(async (
+    endpoint: string,
+    extraFormData?: (fd: FormData) => void,
+  ) => {
     try {
-      await action()
-      await reloadDocument()
-      if (id) {
-        analyzeDocument(id)
-      }
+      const newBytes = await sendPdfOperation(endpoint, extraFormData)
+      updatePdf(newBytes)
+      await reloadFromBytes(newBytes)
     } catch (err: any) {
       setOperationError(err.response?.data?.error || err.message || 'Operation failed')
       setTimeout(() => setOperationError(null), 5000)
     }
-  }, [reloadDocument, id, analyzeDocument])
+  }, [updatePdf, reloadFromBytes])
 
   const handleRotate = useCallback((page: number, degrees: number) => {
-    handlePageAction(() => api.post(`/documents/${id}/pages/${page}/rotate`, { degrees }))
-  }, [id, handlePageAction])
+    handlePageAction('/editor/rotate-page', (fd) => {
+      fd.append('pageNumber', String(page))
+      fd.append('degrees', String(degrees))
+    })
+  }, [handlePageAction])
 
   const handleDeletePage = useCallback((page: number) => {
-    handlePageAction(() => api.delete(`/documents/${id}/pages/${page}`))
-  }, [id, handlePageAction])
+    handlePageAction('/editor/delete-page', (fd) => {
+      fd.append('pageNumber', String(page))
+    })
+  }, [handlePageAction])
 
   const handleDuplicate = useCallback((page: number) => {
-    handlePageAction(() => api.post(`/documents/${id}/pages/${page}/duplicate`))
-  }, [id, handlePageAction])
+    handlePageAction('/editor/duplicate-page', (fd) => {
+      fd.append('pageNumber', String(page))
+    })
+  }, [handlePageAction])
 
   const handleInsertBlank = useCallback((afterPage: number) => {
-    handlePageAction(() => api.post(`/documents/${id}/pages/insert-blank`, { afterPage }))
-  }, [id, handlePageAction])
+    handlePageAction('/editor/insert-blank', (fd) => {
+      fd.append('afterPage', String(afterPage))
+    })
+  }, [handlePageAction])
 
   const handleReorder = useCallback((newOrder: number[]) => {
-    handlePageAction(() => api.post(`/documents/${id}/pages/reorder`, { order: newOrder }))
-  }, [id, handlePageAction])
+    handlePageAction('/editor/reorder', (fd) => {
+      fd.append('order', JSON.stringify(newOrder))
+    })
+  }, [handlePageAction])
 
-  const handleSave = useCallback(async () => {
-    if (!id) return
-    setSaving(true)
-    try {
-      await api.post(`/documents/${id}/versions`, { label: 'Manual save' })
-    } catch { /* ignore */ }
-    finally { setSaving(false) }
-  }, [id])
+  const handleDownload = useCallback(() => {
+    const bytes = usePdfStore.getState().pdfBytes
+    if (bytes) {
+      const name = fileName.replace('.pdf', '') + '_edited.pdf'
+      downloadPdf(bytes, name)
+    }
+  }, [fileName])
+
+  const handleFileOpen = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = ''
+    const buffer = await file.arrayBuffer()
+    const bytes = new Uint8Array(buffer)
+    setPdf(bytes, file.name)
+    setLoading(true)
+    setError('')
+    loadFromBytes(bytes)
+  }, [setPdf, loadFromBytes])
 
   const scrollToPage = useCallback((page: number) => {
     const container = scrollContainerRef.current
@@ -216,48 +218,12 @@ export default function EditorPage() {
   }, [pages.length])
 
   const handlePropertiesUpdate = useCallback(() => {
-    if (id) {
-      analyzeDocument(id)
-      reloadDocument()
-    }
-  }, [id, analyzeDocument, reloadDocument])
-
-  const handleUndo = useCallback(async () => {
-    try {
-      await undo()
-      if (id) {
-        await reloadDocument()
-        analyzeDocument(id)
-      }
-    } catch {
-      setOperationError('Nothing to undo')
-      setTimeout(() => setOperationError(null), 3000)
-    }
-  }, [undo, id, reloadDocument, analyzeDocument])
-
-  const handleRedo = useCallback(async () => {
-    try {
-      await redo()
-      if (id) {
-        await reloadDocument()
-        analyzeDocument(id)
-      }
-    } catch {
-      setOperationError('Nothing to redo')
-      setTimeout(() => setOperationError(null), 3000)
-    }
-  }, [redo, id, reloadDocument, analyzeDocument])
+    const bytes = usePdfStore.getState().pdfBytes
+    if (bytes) reloadFromBytes(bytes)
+  }, [reloadFromBytes])
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
-        e.preventDefault()
-        handleUndo()
-      }
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
-        e.preventDefault()
-        handleRedo()
-      }
       if ((e.ctrlKey || e.metaKey) && e.key === 'h') {
         e.preventDefault()
         setShowFindReplace((v) => !v)
@@ -273,7 +239,38 @@ export default function EditorPage() {
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [handleUndo, handleRedo, selectBlock])
+  }, [selectBlock])
+
+  if (!pdfBytes && !loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center max-w-sm">
+          <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+          <h2 className="text-lg font-semibold text-gray-900 mb-2">No PDF loaded</h2>
+          <p className="text-sm text-gray-500 mb-6">Upload a PDF to start editing</p>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="px-6 py-2.5 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors"
+          >
+            Open PDF
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf"
+            onChange={handleFileOpen}
+            className="hidden"
+          />
+          <button
+            onClick={() => navigate('/')}
+            className="block mx-auto mt-3 text-sm text-gray-500 hover:text-gray-700"
+          >
+            Back to home
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   if (loading) {
     return (
@@ -300,7 +297,7 @@ export default function EditorPage() {
           </div>
           <p className="text-sm text-red-600 mb-4">{error}</p>
           <button
-            onClick={() => navigate(-1)}
+            onClick={() => navigate('/')}
             className="px-4 py-2 text-sm text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors font-medium"
           >
             Go back
@@ -316,17 +313,13 @@ export default function EditorPage() {
         scale={viewport.scale}
         currentPage={currentPage}
         totalPages={pages.length}
-        documentTitle={docTitle}
-        documentId={id}
+        documentTitle={fileName.replace('.pdf', '')}
         onZoomIn={zoomIn}
         onZoomOut={zoomOut}
         onScaleChange={setScale}
-        onBack={() => navigate('/dashboard')}
-        onUndo={handleUndo}
-        onRedo={handleRedo}
+        onBack={() => navigate('/')}
         onExport={() => setShowExportDialog(true)}
-        onShowHistory={() => setShowVersionPanel(true)}
-        onSave={handleSave}
+        onDownload={handleDownload}
         onSign={() => setShowSignature(true)}
         onFindReplace={() => setShowFindReplace((v) => !v)}
         editorMode={editorMode}
@@ -335,8 +328,10 @@ export default function EditorPage() {
 
       <AnnotationToolbar
         visible={editorMode === 'annotate'}
-        documentId={id}
-        onImageInserted={() => { reloadDocument(); if (id) analyzeDocument(id) }}
+        onPdfChanged={async () => {
+          const bytes = usePdfStore.getState().pdfBytes
+          if (bytes) await reloadFromBytes(bytes)
+        }}
       />
 
       <div className="flex-1 flex overflow-hidden">
@@ -367,72 +362,54 @@ export default function EditorPage() {
               scale={viewport.scale}
               pageNumber={index + 1}
               showOverlay={editorMode === 'edit' && !analysisLoading}
-              documentId={id}
-              onDocumentChanged={reloadDocument}
+              onDocumentChanged={async () => {
+                const bytes = usePdfStore.getState().pdfBytes
+                if (bytes) await reloadFromBytes(bytes)
+              }}
               onError={(msg) => { setOperationError(msg); setTimeout(() => setOperationError(null), 5000) }}
             />
           ))}
         </div>
 
-        {editorMode === 'edit' && selectedBlock && id && (
+        {editorMode === 'edit' && selectedBlock && (
           <PropertiesPanel
             block={selectedBlock.block}
-            documentId={id}
             pageNumber={selectedBlock.pageNumber}
             onUpdate={handlePropertiesUpdate}
             onClose={() => selectBlock(null)}
           />
         )}
-
-        {id && (
-          <VersionHistoryPanel
-            documentId={id}
-            open={showVersionPanel}
-            onClose={() => setShowVersionPanel(false)}
-            onRestore={reloadDocument}
-          />
-        )}
       </div>
 
-      {id && (
-        <ExportDialog
-          documentId={id}
-          pageCount={pages.length}
-          open={showExportDialog}
-          onClose={() => setShowExportDialog(false)}
-        />
-      )}
+      <ExportDialog
+        pageCount={pages.length}
+        open={showExportDialog}
+        onClose={() => setShowExportDialog(false)}
+      />
 
-      {id && (
-        <SignatureDialog
-          documentId={id}
-          pageNumber={currentPage}
-          open={showSignature}
-          onClose={() => setShowSignature(false)}
-          onSigned={() => { reloadDocument(); if (id) analyzeDocument(id) }}
-        />
-      )}
+      <SignatureDialog
+        pageNumber={currentPage}
+        open={showSignature}
+        onClose={() => setShowSignature(false)}
+        onSigned={async () => {
+          const bytes = usePdfStore.getState().pdfBytes
+          if (bytes) await reloadFromBytes(bytes)
+        }}
+      />
 
-      {id && (
-        <FindReplaceDialog
-          documentId={id}
-          open={showFindReplace}
-          onClose={() => setShowFindReplace(false)}
-          onReplaced={() => { reloadDocument(); if (id) analyzeDocument(id) }}
-        />
-      )}
-
-      {saving && (
-        <div className="fixed bottom-4 right-4 bg-gray-800 text-white text-xs px-3 py-2 rounded-lg shadow-lg flex items-center gap-2 z-50">
-          <div className="w-3 h-3 rounded-full border-2 border-white border-t-transparent animate-spin" />
-          Saving...
-        </div>
-      )}
+      <FindReplaceDialog
+        open={showFindReplace}
+        onClose={() => setShowFindReplace(false)}
+        onReplaced={async () => {
+          const bytes = usePdfStore.getState().pdfBytes
+          if (bytes) await reloadFromBytes(bytes)
+        }}
+      />
 
       {operationError && (
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-red-600 text-white text-sm px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 z-50">
           <span>{operationError}</span>
-          <button onClick={() => setOperationError(null)} className="text-white/80 hover:text-white font-bold">×</button>
+          <button onClick={() => setOperationError(null)} className="text-white/80 hover:text-white font-bold">x</button>
         </div>
       )}
     </div>
