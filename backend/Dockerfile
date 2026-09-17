@@ -14,4 +14,5 @@ RUN apt-get update && apt-get install -y --no-install-recommends tesseract-ocr t
 COPY --from=build /app/target/*.jar app.jar
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s CMD curl -f http://localhost:8080/api/health || exit 1
-ENTRYPOINT ["java", "-jar", "app.jar"]
+ENV JAVA_OPTS="-Xms256m -Xmx400m -XX:+UseSerialGC -XX:MaxMetaspaceSize=128m"
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]

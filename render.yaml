@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: pdf-editor-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+      - key: CORS_ORIGINS
+        sync: false
+      - key: JAVA_OPTS
+        value: "-Xms256m -Xmx400m -XX:+UseSerialGC -XX:MaxMetaspaceSize=128m"
+    healthCheckPath: /api/health
