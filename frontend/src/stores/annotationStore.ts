@@ -27,7 +27,7 @@ interface AnnotationState {
   setActiveTool: (tool: AnnotationType | null) => void
   setActiveColor: (color: string) => void
   setActiveStrokeWidth: (width: number) => void
-  addAnnotation: (annotation: Annotation) => void
+  addAnnotation: (annotation: Annotation) => string
   updateAnnotation: (id: string, updates: Partial<Annotation>) => void
   deleteAnnotation: (id: string) => void
   selectAnnotation: (id: string | null) => void
@@ -50,7 +50,8 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
 
   addAnnotation: (annotation) => {
     const id = `ann-${tempIdCounter++}`
-    set((s) => ({ annotations: [...s.annotations, { ...annotation, id }] }))
+    set((s) => ({ annotations: [...s.annotations, { ...annotation, id }], selectedAnnotationId: id }))
+    return id
   },
 
   updateAnnotation: (id, updates) => {

@@ -58,10 +58,11 @@ export default function AnnotationToolbar({ visible, onPdfChanged }: AnnotationT
   }
 
   return (
-    <div className="flex items-center gap-2 px-4 py-2 bg-white border-b border-gray-200 shadow-sm overflow-x-auto">
+    <div className="flex items-center gap-1 px-4 py-2 bg-white border-b border-gray-200 shadow-sm overflow-x-auto">
+      {/* Select tool */}
       <button
         onClick={() => setActiveTool(null)}
-        className={`flex items-center gap-1 px-2 py-1.5 rounded-md text-xs font-medium transition-all shrink-0 ${
+        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-all shrink-0 ${
           activeTool === null
             ? 'bg-blue-50 text-blue-600 ring-1 ring-blue-200'
             : 'text-gray-500 hover:bg-gray-100'
@@ -72,8 +73,9 @@ export default function AnnotationToolbar({ visible, onPdfChanged }: AnnotationT
         Select
       </button>
 
-      <div className="w-px h-6 bg-gray-200 shrink-0" />
+      <div className="w-px h-6 bg-gray-200 shrink-0 mx-1" />
 
+      {/* Annotation tools */}
       <div className="flex items-center gap-0.5">
         {tools.map(({ type, label, Icon }) => (
           <button
@@ -92,8 +94,9 @@ export default function AnnotationToolbar({ visible, onPdfChanged }: AnnotationT
         ))}
       </div>
 
-      <div className="w-px h-6 bg-gray-200 shrink-0" />
+      <div className="w-px h-6 bg-gray-200 shrink-0 mx-1" />
 
+      {/* Image upload */}
       <button
         onClick={() => imageInputRef.current?.click()}
         className="flex items-center gap-1 px-2 py-1.5 rounded-md text-xs font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-all shrink-0"
@@ -110,45 +113,57 @@ export default function AnnotationToolbar({ visible, onPdfChanged }: AnnotationT
         className="hidden"
       />
 
-      <div className="w-px h-6 bg-gray-200 shrink-0" />
+      <div className="w-px h-6 bg-gray-200 shrink-0 mx-1.5" />
 
-      <div className="flex items-center gap-1">
-        <span className="text-[10px] text-gray-400 uppercase tracking-wider shrink-0">Color</span>
-        {colors.map((color) => (
-          <button
-            key={color}
-            onClick={() => setActiveColor(color)}
-            className={`w-5 h-5 rounded-full transition-all shrink-0 ${
-              activeColor === color
-                ? 'ring-2 ring-offset-1 ring-gray-400 scale-110'
-                : 'hover:scale-110'
-            }`}
-            style={{ backgroundColor: color }}
-          />
-        ))}
+      {/* Color picker */}
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] text-gray-400 uppercase tracking-wider font-medium shrink-0">
+          Color
+        </span>
+        <div className="flex items-center gap-1.5">
+          {colors.map((color) => (
+            <button
+              key={color}
+              onClick={() => setActiveColor(color)}
+              className={`w-6 h-6 rounded-full transition-all shrink-0 border ${
+                activeColor === color
+                  ? 'ring-2 ring-offset-1 ring-blue-400 scale-110 border-gray-300'
+                  : 'border-gray-200 hover:scale-110 hover:border-gray-300'
+              }`}
+              style={{ backgroundColor: color }}
+              title={color}
+            />
+          ))}
+        </div>
       </div>
 
+      {/* Stroke width (for freehand/shape) */}
       {(activeTool === 'freehand' || activeTool === 'shape') && (
         <>
-          <div className="w-px h-6 bg-gray-200 shrink-0" />
-          <div className="flex items-center gap-1">
-            <span className="text-[10px] text-gray-400 uppercase tracking-wider shrink-0">Width</span>
-            {strokeWidths.map((w) => (
-              <button
-                key={w}
-                onClick={() => setActiveStrokeWidth(w)}
-                className={`w-7 h-7 rounded-md flex items-center justify-center transition-all shrink-0 ${
-                  activeStrokeWidth === w
-                    ? 'bg-blue-50 ring-1 ring-blue-200'
-                    : 'hover:bg-gray-100'
-                }`}
-              >
-                <div
-                  className="rounded-full bg-gray-700"
-                  style={{ width: w * 3 + 2, height: w * 3 + 2 }}
-                />
-              </button>
-            ))}
+          <div className="w-px h-6 bg-gray-200 shrink-0 mx-1.5" />
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-gray-400 uppercase tracking-wider font-medium shrink-0">
+              Width
+            </span>
+            <div className="flex items-center gap-1">
+              {strokeWidths.map((w) => (
+                <button
+                  key={w}
+                  onClick={() => setActiveStrokeWidth(w)}
+                  className={`w-7 h-7 rounded-md flex items-center justify-center transition-all shrink-0 ${
+                    activeStrokeWidth === w
+                      ? 'bg-blue-50 ring-1 ring-blue-200'
+                      : 'hover:bg-gray-100'
+                  }`}
+                  title={`${w}px`}
+                >
+                  <div
+                    className="rounded-full bg-gray-700"
+                    style={{ width: w * 3 + 2, height: w * 3 + 2 }}
+                  />
+                </button>
+              ))}
+            </div>
           </div>
         </>
       )}

@@ -33,6 +33,7 @@ export default function EditorPage() {
   const clearAnalyses = useEditorStore((s) => s.clearAnalyses)
   const clearAnnotations = useAnnotationStore((s) => s.clearAnnotations)
   const setActiveTool = useAnnotationStore((s) => s.setActiveTool)
+  const selectAnnotation = useAnnotationStore((s) => s.selectAnnotation)
 
   const [pdfDoc, setPdfDoc] = useState<PDFDocumentProxy | null>(null)
   const [pages, setPages] = useState<PDFPageProxy[]>([])
@@ -351,7 +352,7 @@ export default function EditorPage() {
         <div
           ref={scrollContainerRef}
           onScroll={handleScroll}
-          onClick={() => selectBlock(null)}
+          onClick={() => { selectBlock(null); selectAnnotation(null) }}
           className="flex-1 overflow-auto py-6 px-4"
           style={{ background: 'linear-gradient(180deg, #f1f5f9 0%, #e2e8f0 100%)' }}
         >

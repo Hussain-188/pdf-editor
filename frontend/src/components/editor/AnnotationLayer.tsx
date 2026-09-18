@@ -30,6 +30,7 @@ export default function AnnotationLayer({ pageNumber, pageHeight, scale }: Annot
   const [, forceRender] = useReducer((x: number) => x + 1, 0)
   const [dragging, setDragging] = useState<{ id: string; startX: number; startY: number; origX: number; origY: number } | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [pendingEditId, setPendingEditId] = useState<string | null>(null)
 
   const activeToolRef = useRef(activeTool)
   const activeColorRef = useRef(activeColor)
@@ -43,7 +44,22 @@ export default function AnnotationLayer({ pageNumber, pageHeight, scale }: Annot
   addAnnotationRef.current = addAnnotation
 
   useEffect(() => {
+    if (pendingEditId && !activeTool) {
+      setEditingId(pendingEditId)
+      setPendingEditId(null)
+    }
+  }, [pendingEditId, activeTool])
+
+  useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (editingId) {
+          setEditingId(null)
+        } else if (selectedId) {
+          selectAnnotation(null)
+        }
+        return
+      }
       if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId && !editingId) {
         e.preventDefault()
         deleteAnnotation(selectedId)
@@ -51,7 +67,7 @@ export default function AnnotationLayer({ pageNumber, pageHeight, scale }: Annot
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [selectedId, editingId, deleteAnnotation])
+  }, [selectedId, editingId, deleteAnnotation, selectAnnotation])
 
   useEffect(() => {
     if (!activeTool) {
@@ -103,14 +119,22 @@ export default function AnnotationLayer({ pageNumber, pageHeight, scale }: Annot
 
         const pdfStart = screenToPdfRef.current(drawStartRef.current)
         const pdfEnd = screenToPdfRef.current(finalPos)
-        const x = Math.min(pdfStart.x, pdfEnd.x)
-        const y = Math.min(pdfStart.y, pdfEnd.y)
-        const w = Math.abs(pdfEnd.x - pdfStart.x)
-        const h = Math.abs(pdfEnd.y - pdfStart.y)
+        let x = Math.min(pdfStart.x, pdfEnd.x)
+        let y = Math.min(pdfStart.y, pdfEnd.y)
+        let w = Math.abs(pdfEnd.x - pdfStart.x)
+        let h = Math.abs(pdfEnd.y - pdfStart.y)
 
-        if (w < 5 && h < 5 && tool !== 'freehand') {
-          forceRender()
-          return
+        if (w < 5 && h < 5) {
+          if (tool === 'textbox') {
+            w = 150; h = 24
+            y = pdfStart.y - h
+          } else if (tool === 'sticky') {
+            w = 150; h = 100
+            y = pdfStart.y - h
+          } else if (tool !== 'freehand') {
+            forceRender()
+            return
+          }
         }
 
         const annotation: Annotation = {
@@ -121,14 +145,20 @@ export default function AnnotationLayer({ pageNumber, pageHeight, scale }: Annot
           color: activeColorRef.current,
           strokeWidth: activeStrokeWidthRef.current,
           ...(tool === 'freehand' ? { points: freehandPointsRef.current } : {}),
-          ...(tool === 'textbox' ? { text: 'Text' } : {}),
-          ...(tool === 'sticky' ? { text: 'Note' } : {}),
+          ...(tool === 'textbox' ? { text: '' } : {}),
+          ...(tool === 'sticky' ? { text: '' } : {}),
           ...(tool === 'shape' ? { shapeType: 'rectangle' as const } : {}),
           ...(tool === 'whiteout' ? { color: '#FFFFFF' } : {}),
         }
 
-        addAnnotationRef.current(annotation)
+        const newId = addAnnotationRef.current(annotation)
         freehandPointsRef.current = []
+
+        if (tool === 'textbox' || tool === 'sticky') {
+          useAnnotationStore.getState().setActiveTool(null)
+          setPendingEditId(newId)
+        }
+
         forceRender()
       }
 
@@ -325,19 +355,24 @@ export default function AnnotationLayer({ pageNumber, pageHeight, scale }: Annot
     }
 
     if (ann.type === 'textbox' || ann.type === 'sticky') {
+      const placeholder = ann.type === 'textbox' ? 'Type here...' : 'Add note...'
       return (
         <div
           key={ann.id}
-          className={`absolute cursor-move ${
-            ann.type === 'sticky' ? 'bg-yellow-200 border border-yellow-400' : 'border border-gray-400 bg-white/90'
-          } ${isSelected ? 'ring-2 ring-blue-500' : ''}`}
+          className={`absolute ${isEditing ? 'cursor-text' : 'cursor-move'} ${
+            ann.type === 'sticky'
+              ? 'bg-yellow-100 border border-yellow-300 shadow-sm'
+              : 'border border-gray-300 bg-white/95 shadow-sm'
+          } ${isSelected ? 'ring-2 ring-blue-500 ring-offset-1' : ''}`}
           style={{
             left: rect.x, top: rect.y,
             width: Math.max(rect.width, 80),
-            minHeight: Math.max(rect.height, 30),
+            minHeight: Math.max(rect.height, 28),
             pointerEvents: 'auto',
-            padding: '4px 6px',
-            fontSize: 12 * scale,
+            padding: '4px 8px',
+            fontSize: 14 * scale,
+            lineHeight: 1.4,
+            borderRadius: ann.type === 'sticky' ? 2 : 3,
           }}
           onMouseDown={(e) => handleAnnotationMouseDown(e, ann)}
           onDoubleClick={(e) => handleDoubleClick(e, ann)}
@@ -346,29 +381,42 @@ export default function AnnotationLayer({ pageNumber, pageHeight, scale }: Annot
             <div
               contentEditable
               suppressContentEditableWarning
-              className="outline-none w-full h-full"
-              style={{ minHeight: 20, cursor: 'text' }}
+              className="outline-none w-full h-full whitespace-pre-wrap break-words"
+              style={{ minHeight: 20, cursor: 'text', color: ann.type === 'sticky' ? '#92400e' : '#1f2937' }}
               onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+              onDoubleClick={(e) => e.stopPropagation()}
               onBlur={(e) => handleTextBlur(ann, e.currentTarget.textContent || '')}
               onKeyDown={(e) => {
                 e.stopPropagation()
-                if (e.key === 'Escape') setEditingId(null)
+                if (e.key === 'Escape') {
+                  e.currentTarget.blur()
+                }
               }}
               ref={(el) => {
-                if (el && !el.textContent) {
+                if (el && document.activeElement !== el) {
                   el.textContent = ann.text || ''
-                  const range = document.createRange()
-                  range.selectNodeContents(el)
-                  range.collapse(false)
-                  const sel = window.getSelection()
-                  sel?.removeAllRanges()
-                  sel?.addRange(range)
                   el.focus()
+                  try {
+                    const range = document.createRange()
+                    range.selectNodeContents(el)
+                    if (ann.text) {
+                      range.collapse(false)
+                    }
+                    const sel = window.getSelection()
+                    sel?.removeAllRanges()
+                    sel?.addRange(range)
+                  } catch { /* ignore range errors */ }
                 }
               }}
             />
           ) : (
-            <span className="text-xs select-none">{ann.text}</span>
+            <span
+              className="select-none whitespace-pre-wrap break-words block"
+              style={{ color: ann.text ? (ann.type === 'sticky' ? '#92400e' : '#1f2937') : '#9ca3af' }}
+            >
+              {ann.text || placeholder}
+            </span>
           )}
         </div>
       )
